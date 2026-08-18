@@ -128,29 +128,23 @@ if uploaded_file is not None:
         'displayModeBar': False  # הסתרת סרגל הכלים העליון של Plotly שתופס מקום בטלפון
         }
 
-      # --- יצירת הטאבים (M ברירת מחדל ראשונה, N בטאב השני) ---
-tab_M, tab_N = st.tabs(["$M$ - Refractivity", "$N$ - Modified Refractivity"])
+     # --- יצירת הטאבים למובייל (M ראשון, N שני) ---
+    tab_M, tab_N = st.tabs(["$M$ - Refractivity", "$N$ - Modified Refractivity"])
 
-mobile_config = {
-    'scrollZoom': False,
-    'displayModeBar': False,
-    'dragmode': False
-}
+    mobile_config = {
+        'scrollZoom': False,
+        'displayModeBar': False,
+        'dragmode': False
+    }
 
-# הצגת גרף M בטאב הראשון
-with tab_M:
-    st.plotly_chart(fig_M, use_container_width=True, config=mobile_config)
+    # הצגת גרף M
+    with tab_M:
+        st.plotly_chart(fig_M, use_container_width=True, config=mobile_config)
 
-# הצגת גרף N בטאב השני
-with tab_N:
-    st.plotly_chart(fig_N, use_container_width=True, config=mobile_config)
+    # הצגת גרף N
+    with tab_N:
+        st.plotly_chart(fig_N, use_container_width=True, config=mobile_config)
 
-# --- הצגת טבלת הנתונים (מחוץ לטאבים, בהזחה שווה לקוד הראשי) ---
-with st.expander("הצג טבלת נתונים מעובדת"):
-    st.dataframe(df)  # או שם משתנה ה-DataFrame שלך (למשל df_processed)
-    
-        # טבלת נתונים
-        with st.expander("הצג טבלת נתונים מעובדת"):
-            st.dataframe(df)
-    else:
-        st.error("לא נשלפו נתונים תקינים מקובץ ה-PDF.")
+    # הצגת טבלת הנתונים המעובדת
+    with st.expander("הצג טבלת נתונים מעובדת"):
+        st.dataframe(df)
