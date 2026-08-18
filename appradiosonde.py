@@ -3,9 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import pdfplumber
-import re
 
-# הגדרת תצורת העמוד ב-Streamlit
 st.set_page_config(
     page_title="ניתוח פרופיל רדיוסונדה - בית דגן",
     page_icon="🎈",
@@ -15,7 +13,7 @@ st.set_page_config(
 st.title("📊 ניתוח פרופיל רדיוסונדה")
 st.write("העלה קובץ PDF של מדידת רדיוסונדה מבית דגן לקבלת פרופילי $N$ ו-$M$.")
 
-# פונקציה מוגנת לעיבוד וחילוץ הנתונים מקובצי PDF
+# פונקציית העיבוד המקורית והתקינה שלך
 def process_radiosonde_pdf(pdf_file):
     lines = []
     with pdfplumber.open(pdf_file) as pdf:
@@ -27,43 +25,31 @@ def process_radiosonde_pdf(pdf_file):
     data = []
     for line in lines:
         parts = line.strip().split()
-        
-        # סינון שורות שמתחילות במספר (שורות הנתונים של הסונדה)
-        if parts and re.match(r'^-?\d', parts[0]):
+        if len(parts) >= 4:
             try:
-                # חילוץ כל המספרים מהשורה
-                nums = [float(x) for x in parts if re.match(r'^-?\d+\.?\d*$', x)]
+                p = float(parts[0])      # לחץ [hPa]
+                h = float(parts[1])      # גובה [m]
+                t = float(parts[2])      # טמפרטורה [C]
+                rh = float(parts[3])     # לחות יחסית [%]
                 
-                # בדיקה שיש לפחות: לחץ, גובה, טמפרטורה, לחות
-                if len(nums) >= 4:
-                    p = nums[0]   # לחץ [hPa]
-                    h = nums[1]   # גובה [m]
-                    t = nums[2]   # טמפרטורה [C]
-                    rh = nums[3]  # לחות יחסית [%]
+                if p > 0 and 0 <= rh <= 100:
+                    e_s = 6.112 * np.exp((17.67 * t) / (t + 243.5))
+                    e = (rh / 100.0) * e_s
+                    T_k = t + 273.15
                     
-                    # סינון ערכים לא תקינים
-                    if p > 0 and 0 <= rh <= 100:
-                        # חישוב לחץ אדים רווי e_s [hPa]
-                        e_s = 6.112 * np.exp((17.67 * t) / (t + 243.5))
-                        # חישוב לחץ אדים בפועל e [hPa]
-                        e = (rh / 100.0) * e_s
-                        # טמפרטורה בקלווין
-                        T_k = t + 273.15
-                        
-                        # חישוב Refractivity (N)
-                        N = (77.6 * (p / T_k)) + (3.73e5 * (e / (T_k**2)))
-                        # חישוב Modified Refractivity (M)
-                        M = N + (h / 0.157)
-                        
-                        data.append({
-                            'Pressure_hPa': p,
-                            'Height_m': h,
-                            'Temp_C': t,
-                            'RH_pct': rh,
-                            'N': N,
-                            'M': M
-                        })
-            except (ValueError, IndexError):
+                    # חישוב N ו-M
+                    N = (77.6 * (p / T_k)) + (3.73e5 * (e / (T_k**2)))
+                    M = N + (0.157 * h)
+                    
+                    data.append({
+                        'Pressure_hPa': p,
+                        'Height_m': h,
+                        'Temp_C': t,
+                        'RH_pct': rh,
+                        'N': N,
+                        'M': M
+                    })
+            except ValueError:
                 continue
 
     df = pd.DataFrame(data)
@@ -71,7 +57,6 @@ def process_radiosonde_pdf(pdf_file):
         df = df.drop_duplicates(subset=['Height_m']).sort_values('Height_m').reset_index(drop=True)
     return df
 
-# רכיב העלאת הקבצים
 uploaded_file = st.file_uploader("בחר קובץ PDF של רדיוסונדה", type=["pdf"])
 
 if uploaded_file is not None:
@@ -83,14 +68,12 @@ if uploaded_file is not None:
     else:
         st.success("הקובץ עובד בהצלחה!")
         
-        # סליידר לסינון גובה מקסימלי
         max_h_val = int(df['Height_m'].max())
         selected_max_h = st.slider("בחר גובה מקסימלי לתצוגה (מטרים):", 0, max_h_val, min(3000, max_h_val), step=100)
         
-        # סינון ה-DataFrame לפי הגובה שנבחר
         df_filtered = df[df['Height_m'] <= selected_max_h]
         
-        # --- יצירת גרף M (Modified Refractivity) ---
+        # --- גרף M (Modified Refractivity) ---
         fig_M = go.Figure()
         fig_M.add_trace(go.Scatter(
             x=df_filtered['M'], 
@@ -106,12 +89,12 @@ if uploaded_file is not None:
             yaxis_title="גובה [מטרים]",
             height=430,
             margin=dict(l=20, r=20, t=40, b=20),
-            dragmode=False
+            dragmode=False  # מונע זום אקראי במגע אצבע במובייל
         )
-        fig_M.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig_M.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', autorange=True)
         fig_M.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
         
-        # --- יצירת גרף N (Refractivity) ---
+        # --- גרף N (Refractivity) ---
         fig_N = go.Figure()
         fig_N.add_trace(go.Scatter(
             x=df_filtered['N'], 
@@ -127,18 +110,18 @@ if uploaded_file is not None:
             yaxis_title="גובה [מטרים]",
             height=430,
             margin=dict(l=20, r=20, t=40, b=20),
-            dragmode=False
+            dragmode=False  # מונע זום אקראי במגע אצבע במובייל
         )
-        fig_N.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig_N.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', autorange=True)
         fig_N.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
 
-        # הגדרות תצוגה למובייל - ביטול זום במגע
+        # הגדרות מובייל
         mobile_config = {
             'scrollZoom': False,
             'displayModeBar': False
         }
 
-        # --- תצוגת הטאבים למובייל (M מופיע ראשון, N שני) ---
+        # --- תצוגת טאבים: M ראשון, N שני ---
         tab_M, tab_N = st.tabs(["$M$ - Refractivity", "$N$ - Modified Refractivity"])
 
         with tab_M:
@@ -147,6 +130,6 @@ if uploaded_file is not None:
         with tab_N:
             st.plotly_chart(fig_N, use_container_width=True, config=mobile_config)
 
-        # --- טבלת נתונים מעובדת ---
+        # --- טבלת נתונים ---
         with st.expander("הצג טבלת נתונים מעובדת"):
             st.dataframe(df_filtered)
