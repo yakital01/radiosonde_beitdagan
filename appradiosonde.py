@@ -128,27 +128,22 @@ if uploaded_file is not None:
         'displayModeBar': False  # הסתרת סרגל הכלים העליון של Plotly שתופס מקום בטלפון
         }
 
-        # --- יצירת הטאבים לתצוגה מותאמת למובייל ---
-        # נגדיר שני טאבים: הראשון עבור N והשני עבור M
-        tab_N, tab_M = st.tabs(["$N$ - Modified Refractivity", "$M$ - Refractivity"])
+       # --- יצירת הטאבים - M כברירת מחדל ראשונה, N בטאב השני ---
+tab_M, tab_N = st.tabs(["$M$ - Refractivity", "$N$ - Modified Refractivity"])
 
-        # הגדרות תצוגה מומלצות למובייל (אם לא הגדרת קודם ב-Layout של ה-fig)
-        # זה מבטיח שהגרף לא יהיה ארוך מדי ושהזום לא ישתגע במגע
-        mobile_config = {
-        'scrollZoom': False,
-        'displayModeBar': False,
-        'dragmode': False
-        }
+mobile_config = {
+    'scrollZoom': False,
+    'displayModeBar': False,
+    'dragmode': False
+}
 
-        # הצגת גרף M בטאב הראשון
-        with tab_M:
-        # ודא ששינית קודם לכן את ה-height ב-fig_M.update_layout לערך כמו 450
-        st.plotly_chart(fig_M, use_container_width=True, config=mobile_config)
+# הצגת גרף M בטאב הראשון (ברירת המחדל שתופיע ראשונה)
+with tab_M:
+    st.plotly_chart(fig_M, use_container_width=True, config=mobile_config)
 
-        # הצגת גרף N בטאב השני
-        with tab_N:
-        # ודא ששינית קודם לכן את ה-height ב-fig_N.update_layout לערך כמו 450
-        st.plotly_chart(fig_N, use_container_width=True, config=mobile_config)
+# הצגת גרף N בטאב השני (יוצג בלחיצה)
+with tab_N:
+    st.plotly_chart(fig_N, use_container_width=True, config=mobile_config)
     
         # טבלת נתונים
         with st.expander("הצג טבלת נתונים מעובדת"):
