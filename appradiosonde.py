@@ -90,11 +90,26 @@ if uploaded_file is not None:
             xaxis_title="M [M-units]",
             yaxis_title="Height AMSL z [m]",
             height=450,
-            margin=dict(l=20, r=20, t=40, b=20),
-            dragmode=False  # מונע מריחה/זום אקראי במגע אצבע
+            margin=dict(l=35, r=35, t=40, b=40),  # הרחבת השוליים למניעת חיתוך המספרים
+            dragmode=False
         )
-        fig_M.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-        fig_M.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig_M.update_xaxes(
+            showgrid=True, 
+            gridwidth=1, 
+            gridcolor='LightGray',
+            ticks="outside",       # הצגת סימוני השנתות מחוץ לקו הציר
+            showline=True,        # הצגת קו ציר מפורש
+            linecolor='black',
+            nticks=8,             # אילוץ הצגת מספר מספק של שנתות
+            separatethousands=False
+        )
+        fig_M.update_yaxes(
+            showgrid=True, 
+            gridwidth=1, 
+            gridcolor='LightGray',
+            showline=True,
+            linecolor='black'
+        )
 
         # --- יצירת גרף N (Refractivity) ---
         fig_N = go.Figure()
@@ -112,19 +127,34 @@ if uploaded_file is not None:
             xaxis_title="N [N-units]",
             yaxis_title="Height AMSL z [m]",
             height=450,
-            margin=dict(l=20, r=20, t=40, b=20),
-            dragmode=False  # מונע מריחה/זום אקראי במגע אצבע
+            margin=dict(l=35, r=35, t=40, b=40),  # הרחבת השוליים למניעת חיתוך המספרים
+            dragmode=False
         )
-        fig_N.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
-        fig_N.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig_N.update_xaxes(
+            showgrid=True, 
+            gridwidth=1, 
+            gridcolor='LightGray',
+            ticks="outside",
+            showline=True,
+            linecolor='black',
+            nticks=8,
+            separatethousands=False
+        )
+        fig_N.update_yaxes(
+            showgrid=True, 
+            gridwidth=1, 
+            gridcolor='LightGray',
+            showline=True,
+            linecolor='black'
+        )
 
-        # הגדרות תצוגת מובייל למניעת זום
+        # הגדרות תצוגת מובייל
         mobile_config = {
             'scrollZoom': False,
             'displayModeBar': False
         }
 
-        # --- הצגה בטאבים: M מופיע כברירת מחדל ראשונה, N בטאב השני ---
+        # --- הצגה בטאבים ---
         tab_M, tab_N = st.tabs(["$M$ - Modified Refractivity", "$N$ - Refractivity"])
 
         with tab_M:
