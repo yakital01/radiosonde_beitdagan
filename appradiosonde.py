@@ -113,6 +113,10 @@ if uploaded_file is not None:
 
         fig.update_layout(height=600, showlegend=False)
 
+        # הצגת קווי רשת גם בציר אופקי (גובה) וגם בציר אנכי (ערכים)
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+
         # הצגת הגרף באפליקציה
         st.plotly_chart(fig, use_container_width=True)
 
