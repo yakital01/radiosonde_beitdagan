@@ -111,14 +111,24 @@ if uploaded_file is not None:
         fig.update_xaxes(title_text="M [M-units]", row=1, col=2)
         fig.update_yaxes(title_text="Height AMSL z [m]", row=1, col=1)
 
-        fig.update_layout(height=600, showlegend=False)
+       # 1. הגדרת גובה מתאים וביטול זום מציק במגע אצבע
+        fig.update_layout(
+        height=420,  # גובה מותאם שלא ימתח את הגרף
+        margin=dict(l=20, r=20, t=40, b=20),  # שוליים קטנים יותר לניצול מסך הטלפון
+        dragmode=False,  # מבטל זום/הזזה אקראית של הגרף במגע אצבע
+        )
 
         # הצגת קווי רשת גם בציר אופקי (גובה) וגם בציר אנכי (ערכים)
         fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
 
-        # הצגת הגרף באפליקציה
-        st.plotly_chart(fig, use_container_width=True)
+        # 2. הצגת הגרף ב-Streamlit עם הגדרת ניתוק אינטראקציית מגע
+        config = {
+        'scrollZoom': False,  # מנעת זום בגלילה/מגע
+        'displayModeBar': False  # הסתרת סרגל הכלים העליון של Plotly שתופס מקום בטלפון
+        }
+
+        st.plotly_chart(fig, use_container_width=True, config=config)
 
         # טבלת נתונים
         with st.expander("הצג טבלת נתונים מעובדת"):
