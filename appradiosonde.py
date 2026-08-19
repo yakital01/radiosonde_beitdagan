@@ -74,6 +74,17 @@ if uploaded_file is not None:
         max_h = st.slider("גובה מקסימלי לתצוגה (מטרים):", 500, 10000, 3000, 500)
         df_filtered = df[df["Height_m"] <= max_h]
 
+        # --- חישוב גבולות ציר X המותאמים (מכפלה של 50 כלפי מטה) ---
+        # עבור M:
+        m_min_val = df_filtered["M"].min()
+        m_start_tick = np.floor(m_min_val / 50.0) * 50.0
+        m_max_val = df_filtered["M"].max() + 10  # מרווח קל מימין
+
+        # עבור N:
+        n_min_val = df_filtered["N"].min()
+        n_start_tick = np.floor(n_min_val / 50.0) * 50.0
+        n_max_val = df_filtered["N"].max() + 10  # מרווח קל מימין
+
         # --- יצירת גרף M (Modified Refractivity) ---
         fig_M = go.Figure()
         fig_M.add_trace(
@@ -90,18 +101,19 @@ if uploaded_file is not None:
             xaxis_title="M [M-units]",
             yaxis_title="Height AMSL z [m]",
             height=450,
-            margin=dict(l=35, r=35, t=40, b=40),  # הרחבת השוליים למניעת חיתוך המספרים
+            margin=dict(l=35, r=35, t=40, b=40),
             dragmode=False
         )
         fig_M.update_xaxes(
             showgrid=True, 
             gridwidth=1, 
             gridcolor='LightGray',
-            ticks="outside",       # הצגת סימוני השנתות מחוץ לקו הציר
-            showline=True,        # הצגת קו ציר מפורש
+            ticks="outside",
+            showline=True,
             linecolor='black',
-            nticks=8,             # אילוץ הצגת מספר מספק של שנתות
-            separatethousands=False
+            tick0=m_start_tick,       # השנתה הראשונה בדיוק במכפלה של 50 מתחת למינימום
+            dtick=50,                 # מרווח קבוע של 50 יחידות בין שנתה לשנתה
+            range=[m_start_tick - 5, m_max_val]  # הגדרת טווח הציר
         )
         fig_M.update_yaxes(
             showgrid=True, 
@@ -127,7 +139,7 @@ if uploaded_file is not None:
             xaxis_title="N [N-units]",
             yaxis_title="Height AMSL z [m]",
             height=450,
-            margin=dict(l=35, r=35, t=40, b=40),  # הרחבת השוליים למניעת חיתוך המספרים
+            margin=dict(l=35, r=35, t=40, b=40),
             dragmode=False
         )
         fig_N.update_xaxes(
@@ -137,8 +149,9 @@ if uploaded_file is not None:
             ticks="outside",
             showline=True,
             linecolor='black',
-            nticks=8,
-            separatethousands=False
+            tick0=n_start_tick,       # השנתה הראשונה בדיוק במכפלה של 50 מתחת למינימום
+            dtick=50,                 # מרווח קבוע של 50 יחידות
+            range=[n_start_tick - 5, n_max_val]
         )
         fig_N.update_yaxes(
             showgrid=True, 
