@@ -14,6 +14,24 @@ st.set_page_config(
     page_title="פרופיל M ו-N - נתוני רדיוסונדה עולמיים", layout="wide"
 )
 
+# עיצוב CSS לתיקון כיוון הסליידר ל-LTR
+st.markdown(
+    """
+    <style>
+    /* כפיית כיוון LTR על הסליידר כדי למנוע היפוך ויזואלי ב-RTL */
+    div[data-testid="stSlider"] {
+        direction: ltr !important;
+    }
+    div[data-testid="stSlider"] label {
+        direction: rtl !important;
+        text-align: right;
+        display: block;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
 
 # --- פונקציות חישוב פיזיקליות ---
 def calculate_N(p, T_C, RH):
@@ -148,11 +166,9 @@ def crop_and_interpolate(df, max_hght):
     """
     df = df.sort_values("HGHT").reset_index(drop=True)
 
-    # נתונים מתחת לגובה המבוקש
     df_below = df[df["HGHT"] <= max_hght].copy()
     df_above = df[df["HGHT"] > max_hght].copy()
 
-    # אם יש קטע שחוצה את גובה היעד, נבצע אינטרפולציה בנקודת החיתוך Exact
     if not df_below.empty and not df_above.empty:
         p1 = df_below.iloc[-1]
         p2 = df_above.iloc[0]
@@ -210,7 +226,6 @@ src_code = "BUFR" if "BUFR" in src_type else "FM35"
 
 submit_btn = st.sidebar.button("🚀 שליפה והצגת פרופיל")
 
-# שמירת הנתונים ב-Session State למניעת שליפה חוזרת בעת שינוי הסליידר
 if submit_btn:
     with st.spinner("שולף נתונים מאתר UWYO..."):
         raw_df, uwyo_url = fetch_uwyo_data(
@@ -218,7 +233,6 @@ if submit_btn:
         )
 
         if raw_df is not None and not raw_df.empty:
-            # דילול וחישוב נתונים מלא עד 5,000 מטר
             df_proc = filter_high_res_data(raw_df)
             df_proc["N"] = df_proc.apply(
                 lambda r: calculate_N(r["PRES"], r["TEMP"], r["RELH"]), axis=1
@@ -233,7 +247,6 @@ if submit_btn:
             st.session_state["processed_df"] = None
             st.session_state["uwyo_url"] = uwyo_url
 
-# הצגת הנתונים והגרפים במידה וקיימים ב-Session State
 if "processed_df" in st.session_state:
     df_proc = st.session_state["processed_df"]
     uwyo_url = st.session_state["uwyo_url"]
@@ -250,7 +263,8 @@ if "processed_df" in st.session_state:
         )
 
         st.markdown("---")
-        # סליידר זום הצמוד לגרפים (עד 5000 מטר בקפיצות של 500 מטר)
+
+        # סליידר זום עם הגדרת LTR מפורשת
         max_height = st.slider(
             "🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):",
             min_value=500,
@@ -259,7 +273,6 @@ if "processed_df" in st.session_state:
             step=500,
         )
 
-        # חיתוך ואינטרפולציה מדויקת לגובה שנבחר
         df_plot = crop_and_interpolate(df_proc, max_height)
 
         tab1, tab2, tab3 = st.tabs(
