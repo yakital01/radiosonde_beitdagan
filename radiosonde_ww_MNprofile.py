@@ -13,7 +13,8 @@ import streamlit as st
 
 # הגדרות תצוגה
 st.set_page_config(
-    page_title="פרופיל M ו-N - נתוני רדיוסונדה עולמיים", layout="wide"
+    page_title="World Wide Radiosonde Refractivity Profiles (N & M)",
+    layout="wide",
 )
 
 
@@ -169,7 +170,7 @@ def crop_and_interpolate(df, max_hght):
 
 
 # --- ממשק משתמש ב-Streamlit ---
-st.title("📊 פרופיל N ו-M מנתוני רדיוסונדה (UWYO)")
+st.title("🌐 World Wide Radiosonde Refractivity Profiles (N & M)")
 
 st.sidebar.header("הגדרות שליפה")
 
@@ -253,7 +254,7 @@ if "processed_df" in st.session_state:
             ["📈 פרופיל M", "📉 פרופיל N", "📋 טבלת נתונים מעובדת"]
         )
 
-        # המרת הנתונים ל-CSV בפורמט UTF-8
+        # המרת הנתונים ל-CSV
         csv_data = df_plot[["HGHT", "PRES", "TEMP", "RELH", "N", "M"]].to_csv(
             index=False
         )
@@ -285,7 +286,6 @@ if "processed_df" in st.session_state:
 
             st.pyplot(fig)
 
-            # יצירת ה-Buffer לשמירת הגרף כתמונה
             buf_m = io.BytesIO()
             fig.savefig(buf_m, format="png", dpi=300, bbox_inches="tight")
             buf_m.seek(0)
@@ -334,7 +334,6 @@ if "processed_df" in st.session_state:
 
             st.pyplot(fig_n)
 
-            # יצירת ה-Buffer לשמירת הגרף כתמונה
             buf_n = io.BytesIO()
             fig_n.savefig(buf_n, format="png", dpi=300, bbox_inches="tight")
             buf_n.seek(0)
