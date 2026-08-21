@@ -3,3 +3,5 @@ plotly
 pdfplumber
 pandas
 numpy
+matplotlib
+beautifulsoup4
