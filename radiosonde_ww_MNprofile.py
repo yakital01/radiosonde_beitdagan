@@ -253,6 +253,11 @@ if "processed_df" in st.session_state:
             ["📈 פרופיל M", "📉 פרופיל N", "📋 טבלת נתונים מעובדת"]
         )
 
+        # המרת הנתונים ל-CSV בפורמט UTF-8
+        csv_data = df_plot[["HGHT", "PRES", "TEMP", "RELH", "N", "M"]].to_csv(
+            index=False
+        )
+
         with tab1:
             fig, ax = plt.subplots(figsize=(6, 8))
             ax.plot(
@@ -285,12 +290,23 @@ if "processed_df" in st.session_state:
             fig.savefig(buf_m, format="png", dpi=300, bbox_inches="tight")
             buf_m.seek(0)
 
-            st.download_button(
-                label="📥 הורד גרף פרופיל M כתמונת PNG",
-                data=buf_m,
-                file_name=f"M_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
-                mime="image/png",
-            )
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="🖼️ הורד גרף פרופיל M (PNG)",
+                    data=buf_m,
+                    file_name=f"M_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+            with col2:
+                st.download_button(
+                    label="📄 הורד נתוני גרף M (CSV)",
+                    data=csv_data,
+                    file_name=f"M_profile_{station_id}_{selected_date}_{selected_hour}Z.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
         with tab2:
             fig_n, ax_n = plt.subplots(figsize=(6, 8))
@@ -323,12 +339,23 @@ if "processed_df" in st.session_state:
             fig_n.savefig(buf_n, format="png", dpi=300, bbox_inches="tight")
             buf_n.seek(0)
 
-            st.download_button(
-                label="📥 הורד גרף פרופיל N כתמונת PNG",
-                data=buf_n,
-                file_name=f"N_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
-                mime="image/png",
-            )
+            col1_n, col2_n = st.columns(2)
+            with col1_n:
+                st.download_button(
+                    label="🖼️ הורד גרף פרופיל N (PNG)",
+                    data=buf_n,
+                    file_name=f"N_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+            with col2_n:
+                st.download_button(
+                    label="📄 הורד נתוני גרף N (CSV)",
+                    data=csv_data,
+                    file_name=f"N_profile_{station_id}_{selected_date}_{selected_hour}Z.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
         with tab3:
             st.dataframe(df_plot[["HGHT", "PRES", "TEMP", "RELH", "N", "M"]])
