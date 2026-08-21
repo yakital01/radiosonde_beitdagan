@@ -14,18 +14,20 @@ st.set_page_config(
     page_title="פרופיל M ו-N - נתוני רדיוסונדה עולמיים", layout="wide"
 )
 
-# עיצוב CSS לתיקון כיוון הסליידר ל-LTR
+# תיקון קלאסי וגורף לכיוון הסליידר ב-RTL
 st.markdown(
     """
     <style>
-    /* כפיית כיוון LTR על הסליידר כדי למנוע היפוך ויזואלי ב-RTL */
-    div[data-testid="stSlider"] {
+    /* כפיית כיוון LTR מלא כולל היררכיית הילדים של הסליידר */
+    div[data-testid="stSlider"], 
+    div[data-testid="stSlider"] * {
         direction: ltr !important;
     }
-    div[data-testid="stSlider"] label {
+    
+    /* החזרת הטקסט של התיאור בלבד לימין */
+    div[data-testid="stSlider"] label p {
         direction: rtl !important;
-        text-align: right;
-        display: block;
+        text-align: right !important;
     }
     </style>
 """,
@@ -264,7 +266,6 @@ if "processed_df" in st.session_state:
 
         st.markdown("---")
 
-        # סליידר זום עם הגדרת LTR מפורשת
         max_height = st.slider(
             "🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):",
             min_value=500,
