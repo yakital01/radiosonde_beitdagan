@@ -1,13 +1,12 @@
-import requests
 import math
 import re
 import urllib.parse
-import urllib.request
-from datetime import datetime, time
+from datetime import datetime
 from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
 
 # הגדרות תצוגה מותאמות למובייל
@@ -20,10 +19,8 @@ st.set_page_config(
 def calculate_N(p, T_C, RH):
     """מחשב את מקדם השבירה האטמוספרי N"""
     T_K = T_C + 273.15
-    # לחץ אדים רווי (hPa)
     e_sat = 6.112 * math.exp((17.67 * T_C) / (T_C + 243.5))
     e = (RH / 100.0) * e_sat
-    # נוסחת N המקובלת
     N = (77.6 * p / T_K) + (3.73e5 * e / (T_K**2))
     return N
 
@@ -34,14 +31,10 @@ def calculate_M(N, z_m):
 
 
 # --- פונקציית שליפת נתונים מ-UWYO ---
-def fetch_uwyo_data(station_id, date_obj, hour_str, src_type="BUFR"):
+def fetch_uwyo_data(station_id, date_obj, hour_str, preferred_src="BUFR"):
     date_str = date_obj.strftime("%Y-%m-%d")
-
-    # 1. הרכבת ה-datetime וקידוד תקין של הרווח ל-%20
     raw_datetime = f"{date_str} {hour_str}:00:00"
     encoded_datetime = urllib.parse.quote(raw_datetime)
-
-    full_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={encoded_datetime}&id={station_id}&src={src_type}&type=TEXT:LIST"
 
     headers = {
         "User-Agent": (
@@ -50,53 +43,59 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, src_type="BUFR"):
         )
     }
 
-    try:
-        response = requests.get(full_url, headers=headers, timeout=20)
-        if response.status_code != 200:
-            return None, full_url
+    # מנגנון ניסיון מועדף + נפילה (Fallback) למקור השני אם נכשל
+    sources_to_try = [preferred_src]
+    alt_src = "FM35" if preferred_src == "BUFR" else "BUFR"
+    sources_to_try.append(alt_src)
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        pre_tag = soup.find("pre")
+    for src_type in sources_to_try:
+        full_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={encoded_datetime}&id={station_id}&src={src_type}&type=TEXT:LIST"
 
-        if not pre_tag or "Unable to retrieve" in response.text:
-            return None, full_url
+        try:
+            response = requests.get(full_url, headers=headers, timeout=15)
+            if response.status_code != 200:
+                continue
 
-        lines = pre_tag.text.strip().split("\n")
-        data_rows = []
+            soup = BeautifulSoup(response.text, "html.parser")
+            pre_tag = soup.find("pre")
 
-        for line in lines:
-            parts = line.split()
-            # בדיקה שהשורה מכילה נתונים נומריים ולא כותרות
-            # שורת נתונים תתחיל במספר (הלחץ הפיזיונומי ב-hPa)
-            if parts and parts[0].replace(".", "", 1).isdigit():
-                try:
-                    p = float(parts[0])  # PRES (hPa)
-                    z = float(parts[1])  # HGHT (m)
-                    t = float(parts[2])  # TEMP (C)
+            if not pre_tag or "Unable to retrieve" in response.text:
+                continue
 
-                    # בנתוני BUFR ברזולוציה גבוהה, הלחות היחסית (RELH) היא בדרך כלל בעמודה ה-5 (אינדקס 4)
-                    # אם הטור חסר, מציבים NaN
-                    rh = float(parts[4]) if len(parts) >= 5 else float("nan")
+            lines = pre_tag.text.strip().split("\n")
+            data_rows = []
 
-                    data_rows.append(
-                        {"PRES": p, "HGHT": z, "TEMP": t, "RELH": rh}
-                    )
-                except (ValueError, IndexError):
-                    continue
+            for line in lines:
+                parts = line.split()
+                # וידוא שורת נתונים: לפחות 5 עמודות, והראשונה היא מספר (לחץ)
+                if len(parts) >= 5:
+                    try:
+                        p = float(parts[0])  # PRES
+                        z = float(parts[1])  # HGHT
+                        t = float(parts[2])  # TEMP
+                        rh = float(parts[4])  # RELH
 
-        if not data_rows:
-            return None, full_url
+                        # סינון ערכים לא תקינים או חסרים (כמו 9999)
+                        if p < 100 or z < -100 or t < -100 or rh < 0:
+                            continue
 
-        df = pd.DataFrame(data_rows)
+                        data_rows.append(
+                            {"PRES": p, "HGHT": z, "TEMP": t, "RELH": rh}
+                        )
+                    except ValueError:
+                        continue
 
-        # ניקוי שורות שבהן חסר טמפרטורה או לחות לטובת חישובי N ו-M
-        df = df.dropna(subset=["TEMP", "RELH"]).reset_index(drop=True)
+            if data_rows:
+                df = pd.DataFrame(data_rows)
+                return df, full_url
 
-        return df, full_url
+        except Exception as e:
+            print(f"Error fetching {src_type}: {e}")
+            continue
 
-    except Exception as e:
-        print(f"Error fetching UWYO data: {e}")
-        return None, full_url
+    # אם שני המקורות נכשלו
+    last_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={encoded_datetime}&id={station_id}&src={preferred_src}&type=TEXT:LIST"
+    return None, last_url
 
 
 # --- פונקציית דילול מדורג לפי גובה ---
@@ -106,12 +105,11 @@ def filter_high_res_data(df):
     """
     df = df.sort_values("HGHT").reset_index(drop=True)
 
-    # בדיקת הפרשי גובה ממוצעים ב-10 השורות הראשונות
     if len(df) > 10:
         diffs = df["HGHT"].diff().dropna()
         avg_diff = diffs.head(10).mean()
     else:
-        avg_diff = 100  # אם מעט מדי שורות, אל תדלל
+        avg_diff = 100
 
     # אם הרזולוציה גסה מ-25 מטר - החזר ללא דילול
     if avg_diff > 25:
@@ -140,7 +138,6 @@ def filter_high_res_data(df):
                 filtered_rows.append(row)
                 last_z = z
         else:
-            # מעל 3,000 מטר לוקחים את כל הנתונים הקיימים
             filtered_rows.append(row)
             last_z = z
 
@@ -150,10 +147,8 @@ def filter_high_res_data(df):
 # --- ממשק משתמש ב-Streamlit ---
 st.title("📊 פרופיל N ו-M מנתוני רדיוסונדה (UWYO)")
 
-# סרגל צד להזנת נתונים - מותאם למובייל
 st.sidebar.header("הגדרות שליפה")
 
-# בחירת תחנה מקובלת או הקלדה חופשית
 stations = {
     "40179 - בית דגן (ישראל)": "40179",
     "10393 - לנדסברג (גרמניה)": "10393",
@@ -194,7 +189,6 @@ if submit_btn:
         )
         st.markdown(f"🔗 [לבדיקת הדף המקורי באתר UWYO]({uwyo_url})")
     else:
-        # קישור ישיר לדף UWYO לנוחות
         st.success("הנתונים נשלפו בהצלחה!")
         st.markdown(
             f"🔗 **[לחץ כאן לצפייה בטבלת הנתונים המקורית באתר UWYO]({uwyo_url})**"
@@ -211,7 +205,6 @@ if submit_btn:
             lambda r: calculate_M(r["N"], r["HGHT"]), axis=1
         )
 
-        # הצגת הגרפים בטאבים
         tab1, tab2, tab3 = st.tabs(
             ["📈 פרופיל M", "📉 פרופיל N", "📋 טבלת נתונים מעובדת"]
         )
@@ -231,7 +224,6 @@ if submit_btn:
             ax.set_title(f"Modified Refractivity (M) Profile - {station_id}")
             ax.grid(True, which="both", linestyle="--", alpha=0.6)
 
-            # שנתות מדויקות
             m_min, m_max = math.floor(
                 df_filtered["M"].min() / 50
             ) * 50, math.ceil(df_filtered["M"].max() / 50) * 50
