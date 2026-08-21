@@ -1,3 +1,4 @@
+import requests
 import math
 import re
 import urllib.parse
@@ -34,81 +35,57 @@ def calculate_M(N, z_m):
 
 # --- פונקציית שליפת נתונים מ-UWYO ---
 def fetch_uwyo_data(station_id, date_obj, hour_str, src_type):
-    year = date_obj.strftime("%Y")
-    month = date_obj.strftime("%m")
-    day_from = date_obj.strftime("%d")
-    day_to = date_obj.strftime("%d")
+    date_str = date_obj.strftime("%Y-%m-%d")
+    datetime_param = f"{date_str} {hour_str}:00:00"
 
-    if hour_str == "00":
-        from_hour, to_hour = "00", "00"
-    elif hour_str == "12":
-        from_hour, to_hour = "12", "12"
-    elif hour_str == "06":
-        from_hour, to_hour = "06", "06"
-    elif hour_str == "18":
-        from_hour, to_hour = "18", "18"
-    else:
-        from_hour, to_hour = "00", "12"
+    # URL מעודכן של שרת UWYO (WSGI + HTTPS)
+    full_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={datetime_param}&id={station_id}&src={src_type}&type=TEXT:LIST"
 
-    params = {
-        "region": "namer",  # ברירת מחדל לאזור - האתר מטפל בחיפוש לפי station_id
-        "TYPE": "TEXT:LIST",
-        "YEAR": year,
-        "MONTH": month,
-        "FROM": f"{day_from}{from_hour}",
-        "TO": f"{day_to}{to_hour}",
-        "STNM": station_id,
-        "src": src_type,
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
     }
 
-    base_url = (
-        "http://weather.uwyo.edu/cgi-bin/sounding"  # HTTP יציב עבור פקודת fetch
-    )
-    full_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    try:
+        response = requests.get(full_url, headers=headers, timeout=15)
+        if response.status_code != 200:
+            return None, full_url
 
-    req = urllib.request.Request(
-        full_url, headers={"User-Agent": "Mozilla/5.0"}
-    )
-    with urllib.request.urlopen(req) as response:
-        html = response.read().decode("utf-8", errors="ignore")
+        soup = BeautifulSoup(response.text, "html.parser")
+        pre_tag = soup.find("pre")
 
-    soup = BeautifulSoup(html, "html.parser")
-    pre_tag = soup.find("pre")
+        if not pre_tag or "Unable to retrieve" in response.text:
+            return None, full_url
 
-    if not pre_tag:
-        return None, full_url
+        lines = pre_tag.text.strip().split("\n")
 
-    text_data = pre_tag.get_text()
-    lines = text_data.strip().split("\n")
-
-    # חיפוש שורת הטיטרציה/כותרות הטבלה
-    data_rows = []
-    start_parsing = False
-    for line in lines:
-        if "PRES" in line and "HGHT" in line:
-            start_parsing = True
-            continue
-        if start_parsing:
-            if line.startswith("------") or line.startswith("SHOW"):
-                continue
+        data_rows = []
+        for line in lines:
             parts = line.split()
-            if len(parts) >= 5:
+            # סינון שורות שמתחילות בלחץ נומרי בלבד
+            if parts and parts[0].replace(".", "", 1).isdigit():
                 try:
                     p = float(parts[0])
                     z = float(parts[1])
                     t = float(parts[2])
-                    rh = float(parts[4])
+                    rh = float(parts[4]) if len(parts) >= 5 else np.nan
                     data_rows.append(
                         {"PRES": p, "HGHT": z, "TEMP": t, "RELH": rh}
                     )
-                except ValueError:
+                except (ValueError, IndexError):
                     continue
 
-    if not data_rows:
-        return None, full_url
+        if not data_rows:
+            return None, full_url
 
-    df = pd.DataFrame(data_rows)
-    return df, full_url
+        df = pd.DataFrame(data_rows)
+        df = df.dropna(subset=["TEMP", "RELH"]).reset_index(drop=True)
+        return df, full_url
+
+    except Exception:
+        return None, full_url
 
 
 # --- פונקציית דילול מדורג לפי גובה ---
