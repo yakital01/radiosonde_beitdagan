@@ -14,26 +14,6 @@ st.set_page_config(
     page_title="פרופיל M ו-N - נתוני רדיוסונדה עולמיים", layout="wide"
 )
 
-# תיקון קלאסי וגורף לכיוון הסליידר ב-RTL
-st.markdown(
-    """
-    <style>
-    /* כפיית כיוון LTR מלא כולל היררכיית הילדים של הסליידר */
-    div[data-testid="stSlider"], 
-    div[data-testid="stSlider"] * {
-        direction: ltr !important;
-    }
-    
-    /* החזרת הטקסט של התיאור בלבד לימין */
-    div[data-testid="stSlider"] label p {
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
-
 
 # --- פונקציות חישוב פיזיקליות ---
 def calculate_N(p, T_C, RH):
@@ -266,12 +246,22 @@ if "processed_df" in st.session_state:
 
         st.markdown("---")
 
-        max_height = st.slider(
+        # שימוש ב-select_slider המונע בעיות היפוך RTL בגלל מבנה ה-DOM שלו
+        max_height = st.select_slider(
             "🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):",
-            min_value=500,
-            max_value=5000,
+            options=[
+                500,
+                1000,
+                1500,
+                2000,
+                2500,
+                3000,
+                3500,
+                4000,
+                4500,
+                5000,
+            ],
             value=2500,
-            step=500,
         )
 
         df_plot = crop_and_interpolate(df_proc, max_height)
