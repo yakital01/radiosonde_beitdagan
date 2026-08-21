@@ -43,7 +43,6 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, preferred_src="BUFR"):
         )
     }
 
-    # מנגנון ניסיון מועדף + נפילה (Fallback) למקור השני אם נכשל
     sources_to_try = [preferred_src]
     alt_src = "FM35" if preferred_src == "BUFR" else "BUFR"
     sources_to_try.append(alt_src)
@@ -98,7 +97,8 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, preferred_src="BUFR"):
 # --- פונקציית דילול מדורג לפי גובה ---
 def filter_high_res_data(df):
     """
-    מבצע דילול מדורג אך ורק במידה והנתונים ברזולוציה גבוהה (מתחת ל-25 מטר הפרש ממוצע)
+    מבצע דילול מדורג ברזולוציה גבוהה (מתחת ל-25 מטר הפרש ממוצע).
+    אם הנתונים ברזולוציה גסה - לא מבוצע דילול.
     """
     df = df.sort_values("HGHT").reset_index(drop=True)
 
@@ -140,13 +140,50 @@ def filter_high_res_data(df):
     return pd.DataFrame(filtered_rows)
 
 
+# --- פונקציה לחיתוך מדויק ואינטרפולציה בגובה היעד ---
+def crop_and_interpolate(df, max_hght):
+    """
+    חותכת את הנתונים עד max_hght.
+    אם Point A מתחת ל-max_hght ו-Point B מעליו, מבוצעת אינטרפולציה ב-max_hght.
+    """
+    df = df.sort_values("HGHT").reset_index(drop=True)
+
+    # נתונים מתחת לגובה המבוקש
+    df_below = df[df["HGHT"] <= max_hght].copy()
+    df_above = df[df["HGHT"] > max_hght].copy()
+
+    # אם יש קטע שחוצה את גובה היעד, נבצע אינטרפולציה בנקודת החיתוך Exact
+    if not df_below.empty and not df_above.empty:
+        p1 = df_below.iloc[-1]
+        p2 = df_above.iloc[0]
+
+        if p1["HGHT"] < max_hght:
+            z1, z2 = p1["HGHT"], p2["HGHT"]
+            factor = (max_hght - z1) / (z2 - z1)
+
+            interp_row = {
+                "HGHT": max_hght,
+                "PRES": p1["PRES"] + factor * (p2["PRES"] - p1["PRES"]),
+                "TEMP": p1["TEMP"] + factor * (p2["TEMP"] - p1["TEMP"]),
+                "RELH": p1["RELH"] + factor * (p2["RELH"] - p1["RELH"]),
+                "N": p1["N"] + factor * (p2["N"] - p1["N"]),
+                "M": p1["M"] + factor * (p2["M"] - p1["M"]),
+            }
+            df_below = pd.concat(
+                [df_below, pd.DataFrame([interp_row])], ignore_index=True
+            )
+
+    return df_below
+
+
 # --- ממשק משתמש ב-Streamlit ---
 st.title("📊 פרופיל N ו-M מנתוני רדיוסונדה (UWYO)")
 
-st.sidebar.header("הגדרות שליפה ותצוגה")
+st.sidebar.header("הגדרות שליפה")
 
 stations = {
     "40179 - בית דגן (ישראל)": "40179",
+    "40417 - עמאן (ירדן)": "40417",
     "10393 - לנדסברג (גרמניה)": "10393",
     "16080 - מילאנו (איטליה)": "16080",
     "62318 - אל עריש (מצרים)": "62318",
@@ -171,24 +208,37 @@ src_type = st.sidebar.radio(
 )
 src_code = "BUFR" if "BUFR" in src_type else "FM35"
 
-# סליידר לבחירת גובה מקסימלי לתצוגה
-max_height = st.sidebar.slider(
-    "גובה מקסימלי לתצוגה (מטרים):",
-    min_value=500,
-    max_value=5000,
-    value=3500,
-    step=500,
-)
-
 submit_btn = st.sidebar.button("🚀 שליפה והצגת פרופיל")
 
+# שמירת הנתונים ב-Session State למניעת שליפה חוזרת בעת שינוי הסליידר
 if submit_btn:
     with st.spinner("שולף נתונים מאתר UWYO..."):
-        df, uwyo_url = fetch_uwyo_data(
+        raw_df, uwyo_url = fetch_uwyo_data(
             station_id, selected_date, selected_hour, src_code
         )
 
-    if df is None or df.empty:
+        if raw_df is not None and not raw_df.empty:
+            # דילול וחישוב נתונים מלא עד 5,000 מטר
+            df_proc = filter_high_res_data(raw_df)
+            df_proc["N"] = df_proc.apply(
+                lambda r: calculate_N(r["PRES"], r["TEMP"], r["RELH"]), axis=1
+            )
+            df_proc["M"] = df_proc.apply(
+                lambda r: calculate_M(r["N"], r["HGHT"]), axis=1
+            )
+
+            st.session_state["processed_df"] = df_proc
+            st.session_state["uwyo_url"] = uwyo_url
+        else:
+            st.session_state["processed_df"] = None
+            st.session_state["uwyo_url"] = uwyo_url
+
+# הצגת הנתונים והגרפים במידה וקיימים ב-Session State
+if "processed_df" in st.session_state:
+    df_proc = st.session_state["processed_df"]
+    uwyo_url = st.session_state["uwyo_url"]
+
+    if df_proc is None or df_proc.empty:
         st.error(
             "לא נמצאו נתונים לתחנה ולזמן הנבחר. ייתכן והנתונים עדיין לא עודכנו באתר."
         )
@@ -199,19 +249,18 @@ if submit_btn:
             f"🔗 **[לחץ כאן לצפייה בטבלת הנתונים המקורית באתר UWYO]({uwyo_url})**"
         )
 
-        # 1. דילול מדורג
-        df_filtered = filter_high_res_data(df)
-
-        # 2. חישוב N ו-M
-        df_filtered["N"] = df_filtered.apply(
-            lambda r: calculate_N(r["PRES"], r["TEMP"], r["RELH"]), axis=1
+        st.markdown("---")
+        # סליידר זום הצמוד לגרפים (עד 5000 מטר בקפיצות של 500 מטר)
+        max_height = st.slider(
+            "🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):",
+            min_value=500,
+            max_value=5000,
+            value=2500,
+            step=500,
         )
-        df_filtered["M"] = df_filtered.apply(
-            lambda r: calculate_M(r["N"], r["HGHT"]), axis=1
-        )
 
-        # 3. סינון לפי גובה מקסימלי שנבחר בסליידר
-        df_plot = df_filtered[df_filtered["HGHT"] <= max_height].copy()
+        # חיתוך ואינטרפולציה מדויקת לגובה שנבחר
+        df_plot = crop_and_interpolate(df_proc, max_height)
 
         tab1, tab2, tab3 = st.tabs(
             ["📈 פרופיל M", "📉 פרופיל N", "📋 טבלת נתונים מעובדת"]
@@ -235,7 +284,6 @@ if submit_btn:
             )
             ax.grid(True, which="both", linestyle="--", alpha=0.6)
 
-            # הגדרת שנתות עגולות של 50 יחידות M רק עבור טווח הנתונים המוצג
             if not df_plot.empty:
                 m_min = math.floor(df_plot["M"].min() / 50) * 50
                 m_max = math.ceil(df_plot["M"].max() / 50) * 50
