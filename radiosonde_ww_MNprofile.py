@@ -34,12 +34,14 @@ def calculate_M(N, z_m):
 
 
 # --- פונקציית שליפת נתונים מ-UWYO ---
-def fetch_uwyo_data(station_id, date_obj, hour_str, src_type):
+def fetch_uwyo_data(station_id, date_obj, hour_str, src_type="BUFR"):
     date_str = date_obj.strftime("%Y-%m-%d")
-    datetime_param = f"{date_str} {hour_str}:00:00"
 
-    # URL מעודכן של שרת UWYO (WSGI + HTTPS)
-    full_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={datetime_param}&id={station_id}&src={src_type}&type=TEXT:LIST"
+    # 1. הרכבת ה-datetime וקידוד תקין של הרווח ל-%20
+    raw_datetime = f"{date_str} {hour_str}:00:00"
+    encoded_datetime = urllib.parse.quote(raw_datetime)
+
+    full_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={encoded_datetime}&id={station_id}&src={src_type}&type=TEXT:LIST"
 
     headers = {
         "User-Agent": (
@@ -49,7 +51,7 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, src_type):
     }
 
     try:
-        response = requests.get(full_url, headers=headers, timeout=15)
+        response = requests.get(full_url, headers=headers, timeout=20)
         if response.status_code != 200:
             return None, full_url
 
@@ -60,17 +62,22 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, src_type):
             return None, full_url
 
         lines = pre_tag.text.strip().split("\n")
-
         data_rows = []
+
         for line in lines:
             parts = line.split()
-            # סינון שורות שמתחילות בלחץ נומרי בלבד
+            # בדיקה שהשורה מכילה נתונים נומריים ולא כותרות
+            # שורת נתונים תתחיל במספר (הלחץ הפיזיונומי ב-hPa)
             if parts and parts[0].replace(".", "", 1).isdigit():
                 try:
-                    p = float(parts[0])
-                    z = float(parts[1])
-                    t = float(parts[2])
-                    rh = float(parts[4]) if len(parts) >= 5 else np.nan
+                    p = float(parts[0])  # PRES (hPa)
+                    z = float(parts[1])  # HGHT (m)
+                    t = float(parts[2])  # TEMP (C)
+
+                    # בנתוני BUFR ברזולוציה גבוהה, הלחות היחסית (RELH) היא בדרך כלל בעמודה ה-5 (אינדקס 4)
+                    # אם הטור חסר, מציבים NaN
+                    rh = float(parts[4]) if len(parts) >= 5 else float("nan")
+
                     data_rows.append(
                         {"PRES": p, "HGHT": z, "TEMP": t, "RELH": rh}
                     )
@@ -81,10 +88,14 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, src_type):
             return None, full_url
 
         df = pd.DataFrame(data_rows)
+
+        # ניקוי שורות שבהן חסר טמפרטורה או לחות לטובת חישובי N ו-M
         df = df.dropna(subset=["TEMP", "RELH"]).reset_index(drop=True)
+
         return df, full_url
 
-    except Exception:
+    except Exception as e:
+        print(f"Error fetching UWYO data: {e}")
         return None, full_url
 
 
