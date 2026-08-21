@@ -1,3 +1,4 @@
+import io
 import math
 import re
 import time
@@ -239,7 +240,6 @@ if "processed_df" in st.session_state:
 
         st.markdown("---")
 
-        # תחליף יציב, נקי ולא שביר לבחירת גובה (Radio אופקי)
         max_height = st.radio(
             "🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):",
             options=[500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000],
@@ -280,6 +280,18 @@ if "processed_df" in st.session_state:
 
             st.pyplot(fig)
 
+            # יצירת ה-Buffer לשמירת הגרף כתמונה
+            buf_m = io.BytesIO()
+            fig.savefig(buf_m, format="png", dpi=300, bbox_inches="tight")
+            buf_m.seek(0)
+
+            st.download_button(
+                label="📥 הורד גרף פרופיל M כתמונת PNG",
+                data=buf_m,
+                file_name=f"M_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
+                mime="image/png",
+            )
+
         with tab2:
             fig_n, ax_n = plt.subplots(figsize=(6, 8))
             ax_n.plot(
@@ -305,6 +317,18 @@ if "processed_df" in st.session_state:
                 ax_n.set_ylim(df_plot["HGHT"].min(), max_height)
 
             st.pyplot(fig_n)
+
+            # יצירת ה-Buffer לשמירת הגרף כתמונה
+            buf_n = io.BytesIO()
+            fig_n.savefig(buf_n, format="png", dpi=300, bbox_inches="tight")
+            buf_n.seek(0)
+
+            st.download_button(
+                label="📥 הורד גרף פרופיל N כתמונת PNG",
+                data=buf_n,
+                file_name=f"N_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
+                mime="image/png",
+            )
 
         with tab3:
             st.dataframe(df_plot[["HGHT", "PRES", "TEMP", "RELH", "N", "M"]])
