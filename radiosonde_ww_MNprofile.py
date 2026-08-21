@@ -96,10 +96,6 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, preferred_src="BUFR"):
 
 # --- פונקציית דילול מדורג לפי גובה ---
 def filter_high_res_data(df):
-    """
-    מבצע דילול מדורג ברזולוציה גבוהה (מתחת ל-25 מטר הפרש ממוצע).
-    אם הנתונים ברזולוציה גסה - לא מבוצע דילול.
-    """
     df = df.sort_values("HGHT").reset_index(drop=True)
 
     if len(df) > 10:
@@ -142,10 +138,6 @@ def filter_high_res_data(df):
 
 # --- פונקציה לחיתוך מדויק ואינטרפולציה בגובה היעד ---
 def crop_and_interpolate(df, max_hght):
-    """
-    חותכת את הנתונים עד max_hght.
-    אם Point A מתחת ל-max_hght ו-Point B מעליו, מבוצעת אינטרפולציה ב-max_hght.
-    """
     df = df.sort_values("HGHT").reset_index(drop=True)
 
     df_below = df[df["HGHT"] <= max_hght].copy()
@@ -246,23 +238,26 @@ if "processed_df" in st.session_state:
 
         st.markdown("---")
 
-        # שימוש ב-select_slider המונע בעיות היפוך RTL בגלל מבנה ה-DOM שלו
-        max_height = st.select_slider(
-            "🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):",
-            options=[
-                500,
-                1000,
-                1500,
-                2000,
-                2500,
-                3000,
-                3500,
-                4000,
-                4500,
-                5000,
-            ],
-            value=2500,
-        )
+        st.markdown("**🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):**")
+
+        # עטיפת הסליידר בקונטיינר LTR שמונע מהדפדפן וה-CSS להפוך אותו
+        slider_container = st.container()
+        with slider_container:
+            st.markdown(
+                '<div dir="ltr" style="direction: ltr !important;">',
+                unsafe_allow_html=True,
+            )
+
+            max_height = st.slider(
+                label="zoom_slider",
+                min_value=500,
+                max_value=5000,
+                value=2500,
+                step=500,
+                label_visibility="collapsed",
+            )
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
         df_plot = crop_and_interpolate(df_proc, max_height)
 
