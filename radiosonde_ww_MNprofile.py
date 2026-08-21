@@ -1,5 +1,6 @@
 import math
 import re
+import time
 import urllib.parse
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -9,7 +10,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# הגדרות תצוגה מותאמות למובייל
+# הגדרות תצוגה
 st.set_page_config(
     page_title="פרופיל M ו-N - נתוני רדיוסונדה עולמיים", layout="wide"
 )
@@ -50,45 +51,45 @@ def fetch_uwyo_data(station_id, date_obj, hour_str, preferred_src="BUFR"):
     for src_type in sources_to_try:
         full_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={encoded_datetime}&id={station_id}&src={src_type}&type=TEXT:LIST"
 
-        try:
-            response = requests.get(full_url, headers=headers, timeout=15)
-            if response.status_code != 200:
-                continue
+        for attempt in range(3):
+            try:
+                response = requests.get(full_url, headers=headers, timeout=45)
+                if response.status_code != 200:
+                    time.sleep(1.5)
+                    continue
 
-            soup = BeautifulSoup(response.text, "html.parser")
-            pre_tag = soup.find("pre")
+                soup = BeautifulSoup(response.text, "html.parser")
+                pre_tag = soup.find("pre")
 
-            if not pre_tag or "Unable to retrieve" in response.text:
-                continue
+                if not pre_tag or "Unable to retrieve" in response.text:
+                    break
 
-            lines = pre_tag.text.strip().split("\n")
-            data_rows = []
+                lines = pre_tag.text.strip().split("\n")
+                data_rows = []
 
-            for line in lines:
-                parts = line.split()
-                if len(parts) >= 5:
-                    try:
-                        p = float(parts[0])  # PRES
-                        z = float(parts[1])  # HGHT
-                        t = float(parts[2])  # TEMP
-                        rh = float(parts[4])  # RELH
+                for line in lines:
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        try:
+                            p = float(parts[0])
+                            z = float(parts[1])
+                            t = float(parts[2])
+                            rh = float(parts[4])
 
-                        if p < 100 or z < -100 or t < -100 or rh < 0:
+                            if p < 100 or z < -100 or t < -100 or rh < 0:
+                                continue
+
+                            data_rows.append(
+                                {"PRES": p, "HGHT": z, "TEMP": t, "RELH": rh}
+                            )
+                        except ValueError:
                             continue
 
-                        data_rows.append(
-                            {"PRES": p, "HGHT": z, "TEMP": t, "RELH": rh}
-                        )
-                    except ValueError:
-                        continue
+                if data_rows:
+                    return pd.DataFrame(data_rows), full_url
 
-            if data_rows:
-                df = pd.DataFrame(data_rows)
-                return df, full_url
-
-        except Exception as e:
-            print(f"Error fetching {src_type}: {e}")
-            continue
+            except Exception:
+                time.sleep(1.5)
 
     last_url = f"https://weather.uwyo.edu/wsgi/sounding?datetime={encoded_datetime}&id={station_id}&src={preferred_src}&type=TEXT:LIST"
     return None, last_url
@@ -227,7 +228,7 @@ if "processed_df" in st.session_state:
 
     if df_proc is None or df_proc.empty:
         st.error(
-            "לא נמצאו נתונים לתחנה ולזמן הנבחר. ייתכן והנתונים עדיין לא עודכנו באתר."
+            "לא נמצאו נתונים לתחנה ולזמן הנבחר. ייתכן והנתונים עדיין לא עודכנו באתר או שהשרת חווה עומס."
         )
         st.markdown(f"🔗 [לבדיקת הדף המקורי באתר UWYO]({uwyo_url})")
     else:
@@ -238,26 +239,13 @@ if "processed_df" in st.session_state:
 
         st.markdown("---")
 
-        st.markdown("**🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):**")
-
-        # עטיפת הסליידר בקונטיינר LTR שמונע מהדפדפן וה-CSS להפוך אותו
-        slider_container = st.container()
-        with slider_container:
-            st.markdown(
-                '<div dir="ltr" style="direction: ltr !important;">',
-                unsafe_allow_html=True,
-            )
-
-            max_height = st.slider(
-                label="zoom_slider",
-                min_value=500,
-                max_value=5000,
-                value=2500,
-                step=500,
-                label_visibility="collapsed",
-            )
-
-            st.markdown("</div>", unsafe_allow_html=True)
+        # תחליף יציב, נקי ולא שביר לבחירת גובה (Radio אופקי)
+        max_height = st.radio(
+            "🔍 בחירת זום - גובה מקסימלי לתצוגה (מטרים):",
+            options=[500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000],
+            index=4,
+            horizontal=True,
+        )
 
         df_plot = crop_and_interpolate(df_proc, max_height)
 
