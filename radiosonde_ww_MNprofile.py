@@ -51,6 +51,16 @@ def calculate_cutoff_frequency(delta_z, delta_m):
         return None
 
 
+def calculate_critical_angle(delta_m):
+    """
+    מחשב את הזווית הקריטית במעלות (Critical Angle in Degrees)
+    theta_c = 0.081 * sqrt(delta_m)
+    """
+    if delta_m <= 0:
+        return 0.0
+    return 0.081 * math.sqrt(delta_m)
+
+
 # --- פונקציית שליפת נתונים מ-UWYO ---
 def fetch_uwyo_data(station_id, date_obj, hour_str, preferred_src="BUFR"):
     date_str = date_obj.strftime("%Y-%m-%d")
@@ -187,8 +197,8 @@ def crop_and_interpolate(df, max_hght):
     return df_below
 
 
-# --- אלגוריתם ניתוח וזיהוי תעלות (Duct Detection Algorithm - Updated) ---
-def detect_ducts(df_input, min_delta_m=2.0, min_delta_z=30.0):
+# --- אלגוריתם ניתוח וזיהוי תעלות ---
+def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
     if df_input is None or len(df_input) < 2:
         return []
 
@@ -201,7 +211,7 @@ def detect_ducts(df_input, min_delta_m=2.0, min_delta_z=30.0):
     in_duct = False
     start_idx = 0
 
-    # 1. זיהוי מקטעי שיפוע שלילי (dM/dz < 0) בנתונים המקוריים
+    # 1. זיהוי מקטעי שיפוע שלילי (dM/dz < 0) בנתונים المקוריים
     for i in range(len(df) - 1):
         dM = df.loc[i + 1, "M"] - df.loc[i, "M"]
 
@@ -232,7 +242,7 @@ def detect_ducts(df_input, min_delta_m=2.0, min_delta_z=30.0):
             else:
                 merged_ducts.append(duct)
 
-    # 3. סינון לפי ספי מינימום וסיווג פיזיקלי באנגלית
+    # 3. סינון לפי ספי מינימום וסיווג פיזיקלי
     final_ducts = []
 
     for s_idx, e_idx in merged_ducts:
@@ -256,8 +266,9 @@ def detect_ducts(df_input, min_delta_m=2.0, min_delta_z=30.0):
         else:
             duct_type = "Elevated Duct"
 
-        # חישוב תדר קטעון
+        # חישוב תדר קטעון וזווית קריטית
         fc_mhz = calculate_cutoff_frequency(delta_z, delta_m)
+        crit_angle_deg = calculate_critical_angle(delta_m)
 
         final_ducts.append(
             {
@@ -267,8 +278,9 @@ def detect_ducts(df_input, min_delta_m=2.0, min_delta_z=30.0):
                 "delta_z": delta_z,
                 "m_base": m_base,
                 "m_top": m_top,
-                "delta_m": delta_m,
+                "delta_m": round(delta_m),  # עיגול למספר שלם
                 "f_cutoff_mhz": fc_mhz,
+                "crit_angle_deg": crit_angle_deg,
             }
         )
 
@@ -338,10 +350,10 @@ src_code = "BUFR" if "BUFR" in src_type else "FM35"
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ ספי זיהוי תעלות (Ducting)")
 min_delta_m = st.sidebar.slider(
-    "עוצמה מינימלית (ΔM min):", 0.5, 10.0, 2.0, step=0.5
+    "עוצמה מינימלית (ΔM min):", 0.5, 15.0, 5.0, step=0.5
 )
 min_delta_z = st.sidebar.slider(
-    "עובי מינימלי (ΔZ min במטרים):", 10, 200, 30, step=10
+    "עובי מינימלי (ΔZ min במטרים):", 10, 200, 50, step=10
 )
 
 submit_btn = st.sidebar.button("🚀 שליפה והצגת פרופיל")
@@ -519,6 +531,7 @@ if "processed_df" in st.session_state:
                             if d["f_cutoff_mhz"]
                             else "N/A"
                         )
+                        crit_angle_str = f"{d['crit_angle_deg']:.2f}°"
 
                         with st.expander(
                             f"Layer {idx}: {d['type']} ({d['z_base']:.0f}m -"
@@ -527,7 +540,7 @@ if "processed_df" in st.session_state:
                         ):
                             m1, m2 = st.columns(2)
                             m1.metric("Thickness (ΔZ)", f"{d['delta_z']:.0f} m")
-                            m2.metric("Intensity (ΔM)", f"{d['delta_m']:.2f} M")
+                            m2.metric("Intensity (ΔM)", f"{d['delta_m']}")
 
                             m3, m4 = st.columns(2)
                             m3.metric("Base Alt (z_base)", f"{d['z_base']:.0f} m")
@@ -535,6 +548,9 @@ if "processed_df" in st.session_state:
 
                             st.markdown(
                                 f"**Cutoff Frequency ($f_{{cutoff}}$):** `{fc_str}`"
+                            )
+                            st.markdown(
+                                f"**Critical Angle ($\theta_c$):** `{crit_angle_str}`"
                             )
 
                         duct_table_data.append(
@@ -544,8 +560,9 @@ if "processed_df" in st.session_state:
                                 "Base Alt [m]": f"{d['z_base']:.0f}",
                                 "Top Alt [m]": f"{d['z_top']:.0f}",
                                 "Thickness ΔZ [m]": f"{d['delta_z']:.0f}",
-                                "Delta M": f"{d['delta_m']:.2f}",
+                                "Delta M": f"{d['delta_m']}",
                                 "Cutoff Freq": fc_str,
+                                "Critical Angle": crit_angle_str,
                             }
                         )
 
