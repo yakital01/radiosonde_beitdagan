@@ -191,7 +191,7 @@ if stations[station_choice] == "custom":
 else:
     station_id = stations[station_choice]
 
-# --- מנגנון בחירת תאריך מוגן מקלדת ומוגן ימים לא קיימים בחודש ---
+# --- מנגנון בחירת תאריך מוגן מקלדת ---
 st.sidebar.markdown("**תאריך:**")
 today = datetime.today()
 
@@ -207,11 +207,9 @@ with col_m:
         "חודש", list(range(1, 13)), index=today.month - 1
     )
 
-# חישוב דינמי של מספר הימים בחודש ובשנה הנבחרים
 max_days_in_month = calendar.monthrange(selected_year, selected_month)[1]
 
 with col_d:
-    # אם היום הנוכחי חורג ממה שיש בחודש הנבחר, נציב את היום המקסימלי
     default_day_idx = min(today.day, max_days_in_month) - 1
     selected_day = st.selectbox(
         "יום", list(range(1, max_days_in_month + 1)), index=default_day_idx
@@ -280,6 +278,9 @@ if "processed_df" in st.session_state:
 
         df_plot = crop_and_interpolate(df_proc, max_height)
 
+        # מחרוזת תאריך ושעה מעוצבת לכותרת
+        datetime_str = f"{selected_date.strftime('%Y-%m-%d')} {selected_hour}:00Z"
+
         tab1, tab2, tab3 = st.tabs(
             ["📈 פרופיל M", "📉 פרופיל N", "📋 טבלת נתונים מעובדת"]
         )
@@ -302,8 +303,8 @@ if "processed_df" in st.session_state:
             ax.set_xlabel("M (Modified Refractivity)")
             ax.set_ylabel("Height (m)")
             ax.set_title(
-                f"Modified Refractivity (M) Profile - {station_id} (Up to"
-                f" {max_height}m)"
+                f"Modified Refractivity (M) Profile\nStation: {station_id} |"
+                f" Date: {datetime_str}"
             )
             ax.grid(True, which="both", linestyle="--", alpha=0.6)
 
@@ -351,7 +352,8 @@ if "processed_df" in st.session_state:
             ax_n.set_xlabel("N (Refractivity)")
             ax_n.set_ylabel("Height (m)")
             ax_n.set_title(
-                f"Refractivity (N) Profile - {station_id} (Up to {max_height}m)"
+                f"Refractivity (N) Profile\nStation: {station_id} | Date:"
+                f" {datetime_str}"
             )
             ax_n.grid(True, which="both", linestyle="--", alpha=0.6)
 
