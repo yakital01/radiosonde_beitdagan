@@ -278,8 +278,9 @@ if "processed_df" in st.session_state:
 
         df_plot = crop_and_interpolate(df_proc, max_height)
 
-        # מחרוזת תאריך ושעה מעוצבת לכותרת
-        datetime_str = f"{selected_date.strftime('%Y-%m-%d')} {selected_hour}:00Z"
+        # עיצוב התאריך לפי הפורמט המבוקש: DDMonYYYY (למשל 22Aug2026)
+        formatted_date_str = selected_date.strftime("%d%b%Y")
+        datetime_str = f"{formatted_date_str} {selected_hour}:00Z"
 
         tab1, tab2, tab3 = st.tabs(
             ["📈 פרופיל M", "📉 פרופיל N", "📋 טבלת נתונים מעובדת"]
@@ -326,7 +327,7 @@ if "processed_df" in st.session_state:
                 st.download_button(
                     label="🖼️ הורד גרף פרופיל M (PNG)",
                     data=buf_m,
-                    file_name=f"M_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
+                    file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.png",
                     mime="image/png",
                     use_container_width=True,
                 )
@@ -334,7 +335,7 @@ if "processed_df" in st.session_state:
                 st.download_button(
                     label="📄 הורד נתוני גרף M (CSV)",
                     data=csv_data,
-                    file_name=f"M_profile_{station_id}_{selected_date}_{selected_hour}Z.csv",
+                    file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.csv",
                     mime="text/csv",
                     use_container_width=True,
                 )
@@ -375,7 +376,7 @@ if "processed_df" in st.session_state:
                 st.download_button(
                     label="🖼️ הורד גרף פרופיל N (PNG)",
                     data=buf_n,
-                    file_name=f"N_profile_{station_id}_{selected_date}_{selected_hour}Z.png",
+                    file_name=f"N_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.png",
                     mime="image/png",
                     use_container_width=True,
                 )
@@ -383,7 +384,7 @@ if "processed_df" in st.session_state:
                 st.download_button(
                     label="📄 הורד נתוני גרף N (CSV)",
                     data=csv_data,
-                    file_name=f"N_profile_{station_id}_{selected_date}_{selected_hour}Z.csv",
+                    file_name=f"N_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.csv",
                     mime="text/csv",
                     use_container_width=True,
                 )
