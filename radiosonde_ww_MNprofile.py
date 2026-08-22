@@ -211,7 +211,7 @@ def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
     in_duct = False
     start_idx = 0
 
-    # 1. זיהוי מקטעי שיפוע שלילי (dM/dz < 0) בנתונים المקוריים
+    # 1. זיהוי מקטעי שיפוע שלילי (dM/dz < 0) בנתונים המקוריים
     for i in range(len(df) - 1):
         dM = df.loc[i + 1, "M"] - df.loc[i, "M"]
 
@@ -278,7 +278,7 @@ def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
                 "delta_z": delta_z,
                 "m_base": m_base,
                 "m_top": m_top,
-                "delta_m": round(delta_m),  # עיגול למספר שלם
+                "delta_m": round(delta_m),
                 "f_cutoff_mhz": fc_mhz,
                 "crit_angle_deg": crit_angle_deg,
             }
@@ -550,7 +550,7 @@ if "processed_df" in st.session_state:
                                 f"**Cutoff Frequency ($f_{{cutoff}}$):** `{fc_str}`"
                             )
                             st.markdown(
-                                f"**Critical Angle ($\theta_c$):** `{crit_angle_str}`"
+                                f"**Critical Angle ($\\theta_c$):** `{crit_angle_str}`"
                             )
 
                         duct_table_data.append(
