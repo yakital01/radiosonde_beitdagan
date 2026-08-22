@@ -34,6 +34,24 @@ def calculate_M(N, z_m):
     return N + 0.157 * z_m
 
 
+def calculate_cutoff_frequency(delta_z, delta_m):
+    """
+    מחשב את תדר הקטעון (Cut-off Frequency) במגה-הרץ (MHz)
+    לפי הנוסחה הניסיונית המקובלת:
+    f_c = c / (0.157 * (delta_z^1.5) * sqrt(delta_m))
+    """
+    if delta_z <= 0 or delta_m <= 0:
+        return None
+
+    c = 3e8  # מהירות האור במטרים לשניה
+    try:
+        f_hz = c / (0.157 * (delta_z**1.5) * math.sqrt(delta_m))
+        f_mhz = f_hz / 1e6
+        return f_mhz
+    except ZeroDivisionError:
+        return None
+
+
 # --- פונקציית שליפת נתונים מ-UWYO ---
 def fetch_uwyo_data(station_id, date_obj, hour_str, preferred_src="BUFR"):
     date_str = date_obj.strftime("%Y-%m-%d")
@@ -170,6 +188,100 @@ def crop_and_interpolate(df, max_hght):
     return df_below
 
 
+# --- אלגוריתם ניתוח וזיהוי תעלות (Duct Detection Algorithm) ---
+def detect_ducts(df_input, min_delta_m=2.0, min_delta_z=30.0):
+    if df_input is None or len(df_input) < 3:
+        return []
+
+    df = df_input.sort_values("HGHT").reset_index(drop=True).copy()
+
+    # 1. החלקה מקדימה קלה למניעת רעשי נגזרת ברזולוציה גבוהה
+    window_size = 3 if len(df) >= 3 else 1
+    df["M_smooth"] = (
+        df["M"].rolling(window=window_size, center=True, min_periods=1).mean()
+    )
+
+    surface_z = df.loc[0, "HGHT"]
+    surface_m = df.loc[0, "M_smooth"]
+
+    raw_ducts = []
+    in_duct = False
+    start_idx = 0
+
+    # 2. זיהוי מקטעי שיפוע שלילי (dM/dz < 0)
+    for i in range(len(df) - 1):
+        dM = df.loc[i + 1, "M_smooth"] - df.loc[i, "M_smooth"]
+
+        if dM < 0:
+            if not in_duct:
+                in_duct = True
+                start_idx = i
+        else:
+            if in_duct:
+                in_duct = False
+                end_idx = i
+                raw_ducts.append((start_idx, end_idx))
+
+    if in_duct:
+        raw_ducts.append((start_idx, len(df) - 1))
+
+    # 3. איחוד תעלות סמוכות מאוד (מרווח מופרד קטן מ-30 מטר)
+    merged_ducts = []
+    for duct in raw_ducts:
+        if not merged_ducts:
+            merged_ducts.append(duct)
+        else:
+            prev_start, prev_end = merged_ducts[-1]
+            curr_start, curr_end = duct
+            gap_z = df.loc[curr_start, "HGHT"] - df.loc[prev_end, "HGHT"]
+            if gap_z <= 30.0:  # איחוד אם ההפרש בין התעלות קטן מ-30 מטר
+                merged_ducts[-1] = (prev_start, curr_end)
+            else:
+                merged_ducts.append(duct)
+
+    # 4. סינון לפי ספי מינימום וסיווג פיזיקלי
+    final_ducts = []
+
+    for s_idx, e_idx in merged_ducts:
+        z_base = df.loc[s_idx, "HGHT"]
+        z_top = df.loc[e_idx, "HGHT"]
+        m_base = df.loc[s_idx, "M_smooth"]
+        m_top = df.loc[e_idx, "M_smooth"]
+
+        delta_z = z_top - z_base
+        delta_m = m_base - m_top
+
+        # סינון לפי עובי ועוצמה מינימליים
+        if delta_z < min_delta_z or delta_m < min_delta_m:
+            continue
+
+        # סיווג סוג התעלה
+        if abs(z_base - surface_z) < 1.0:
+            duct_type = "Surface Duct"
+        elif m_top <= surface_m:
+            duct_type = "Surface-Based Duct"
+        else:
+            duct_type = "Elevated Duct"
+
+        # חישוב תדר קטעון
+        fc_mhz = calculate_cutoff_frequency(delta_z, delta_m)
+
+        final_ducts.append(
+            {
+                "type": duct_type,
+                "z_base": z_base,
+                "z_top": z_top,
+                "delta_z": delta_z,
+                "m_base": m_base,
+                "m_top": m_top,
+                "delta_m": delta_m,
+                "f_cutoff_mhz": fc_mhz,
+            }
+        )
+
+    return final_ducts
+
+
 # --- ממשק משתמש ב-Streamlit ---
 st.title("🌐 World Wide Radiosonde Refractivity Profiles (N & M)")
 
@@ -229,6 +341,16 @@ src_type = st.sidebar.radio(
 )
 src_code = "BUFR" if "BUFR" in src_type else "FM35"
 
+# --- הגדרות סינון תעלות ב-Sidebar ---
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ ספי זיהוי תעלות (Ducting)")
+min_delta_m = st.sidebar.slider(
+    "עוצמה מינימלית (ΔM min):", 0.5, 10.0, 2.0, step=0.5
+)
+min_delta_z = st.sidebar.slider(
+    "עובי מינימלי (ΔZ min במטרים):", 10, 200, 30, step=10
+)
+
 submit_btn = st.sidebar.button("🚀 שליפה והצגת פרופיל")
 
 if submit_btn:
@@ -282,63 +404,174 @@ if "processed_df" in st.session_state:
         formatted_date_str = selected_date.strftime("%d%b%Y")
         datetime_str = f"{formatted_date_str} {selected_hour}:00Z"
 
+        # הרצת אלגוריתם זיהוי התעלות על כל הפרופיל
+        detected_ducts = detect_ducts(
+            df_proc, min_delta_m=min_delta_m, min_delta_z=min_delta_z
+        )
+        # סינון תעלות הנמצאות בטווח הגובה המוצג
+        display_ducts = [d for d in detected_ducts if d["z_base"] <= max_height]
+
         tab1, tab2, tab3 = st.tabs(
-            ["📈 פרופיל M", "📉 פרופיל N", "📋 טבלת נתונים מעובדת"]
+            [
+                "📈 פרופיל M וזיהוי תעלות",
+                "📉 פרופיל N",
+                "📋 טבלת נתונים מעובדת",
+            ]
         )
 
-        # המרת הנתונים ל-CSV
         csv_data = df_plot[["HGHT", "PRES", "TEMP", "RELH", "N", "M"]].to_csv(
             index=False
         )
 
         with tab1:
-            fig, ax = plt.subplots(figsize=(6, 8))
-            ax.plot(
-                df_plot["M"],
-                df_plot["HGHT"],
-                color="blue",
-                linewidth=1.8,
-                marker="o",
-                markersize=3,
-            )
-            ax.set_xlabel("M (Modified Refractivity)")
-            ax.set_ylabel("Height (m)")
-            ax.set_title(
-                f"Modified Refractivity (M) Profile\nStation: {station_id} |"
-                f" Date: {datetime_str}"
-            )
-            ax.grid(True, which="both", linestyle="--", alpha=0.6)
+            col_graph, col_info = st.columns([1.6, 1])
 
-            if not df_plot.empty:
-                m_min = math.floor(df_plot["M"].min() / 50) * 50
-                m_max = math.ceil(df_plot["M"].max() / 50) * 50
-                if m_max - m_min >= 50:
-                    ax.set_xticks(np.arange(m_min, m_max + 1, 50))
-                ax.set_ylim(df_plot["HGHT"].min(), max_height)
-
-            st.pyplot(fig)
-
-            buf_m = io.BytesIO()
-            fig.savefig(buf_m, format="png", dpi=300, bbox_inches="tight")
-            buf_m.seek(0)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.download_button(
-                    label="🖼️ הורד גרף פרופיל M (PNG)",
-                    data=buf_m,
-                    file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.png",
-                    mime="image/png",
-                    use_container_width=True,
+            with col_graph:
+                fig, ax = plt.subplots(figsize=(6, 8))
+                ax.plot(
+                    df_plot["M"],
+                    df_plot["HGHT"],
+                    color="blue",
+                    linewidth=1.8,
+                    marker="o",
+                    markersize=3,
+                    label="M Profile",
                 )
-            with col2:
-                st.download_button(
-                    label="📄 הורד נתוני גרף M (CSV)",
-                    data=csv_data,
-                    file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.csv",
-                    mime="text/csv",
-                    use_container_width=True,
+
+                # סימון הצללה ומעטפת לתעלות בגרף
+                colors_map = {
+                    "Surface Duct": "red",
+                    "Surface-Based Duct": "orange",
+                    "Elevated Duct": "purple",
+                }
+
+                for d in display_ducts:
+                    c = colors_map.get(d["type"], "red")
+                    ax.axhspan(
+                        d["z_base"],
+                        min(d["z_top"], max_height),
+                        color=c,
+                        alpha=0.2,
+                        label=f"{d['type']} ({d['z_base']:.0f}-{d['z_top']:.0f}m)",
+                    )
+                    ax.axhline(
+                        d["z_base"],
+                        color=c,
+                        linestyle="--",
+                        linewidth=1.2,
+                        alpha=0.7,
+                    )
+                    ax.axhline(
+                        min(d["z_top"], max_height),
+                        color=c,
+                        linestyle="--",
+                        linewidth=1.2,
+                        alpha=0.7,
+                    )
+
+                ax.set_xlabel("M (Modified Refractivity)")
+                ax.set_ylabel("Height (m)")
+                ax.set_title(
+                    f"Modified Refractivity (M) Profile\nStation: {station_id}"
+                    f" | Date: {datetime_str}"
                 )
+                ax.grid(True, which="both", linestyle="--", alpha=0.6)
+                ax.legend(loc="upper right", fontsize="small")
+
+                if not df_plot.empty:
+                    m_min = math.floor(df_plot["M"].min() / 50) * 50
+                    m_max = math.ceil(df_plot["M"].max() / 50) * 50
+                    if m_max - m_min >= 50:
+                        ax.set_xticks(np.arange(m_min, m_max + 1, 50))
+                    ax.set_ylim(df_plot["HGHT"].min(), max_height)
+
+                st.pyplot(fig)
+
+                buf_m = io.BytesIO()
+                fig.savefig(buf_m, format="png", dpi=300, bbox_inches="tight")
+                buf_m.seek(0)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        label="🖼️ הורד גרף M (PNG)",
+                        data=buf_m,
+                        file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.png",
+                        mime="image/png",
+                        use_container_width=True,
+                    )
+                with col2:
+                    st.download_button(
+                        label="📄 הורד נתוני CSV",
+                        data=csv_data,
+                        file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+
+            with col_info:
+                st.subheader("📡 ניתוח תעלות (Ducting Analysis)")
+
+                if not detected_ducts:
+                    st.info(
+                        "לא זוהו שכבות תעלה (Duct Layers) העומדות בספי"
+                        " הסינון הפיזיקליים בפרופיל זה."
+                    )
+                else:
+                    st.success(
+                        f"זוהו **{len(detected_ducts)}** שכבות תעלה בפרופיל!"
+                    )
+
+                    duct_table_data = []
+
+                    for idx, d in enumerate(detected_ducts, 1):
+                        fc_str = (
+                            f"{d['f_cutoff_mhz']:.1f} MHz"
+                            if d["f_cutoff_mhz"] and d["f_cutoff_mhz"] < 1000
+                            else f"{d['f_cutoff_mhz']/1000:.2f} GHz"
+                            if d["f_cutoff_mhz"]
+                            else "N/A"
+                        )
+
+                        with st.expander(
+                            f"שכבה {idx}: {d['type']} ({d['z_base']:.0f}m -"
+                            f" {d['z_top']:.0f}m)",
+                            expanded=True,
+                        ):
+                            m1, m2 = st.columns(2)
+                            m1.metric(
+                                "עובי השכבה (ΔZ)", f"{d['delta_z']:.0f} m"
+                            )
+                            m2.metric(
+                                "עוצמת תעלה (ΔM)", f"{d['delta_m']:.2f} M"
+                            )
+
+                            m3, m4 = st.columns(2)
+                            m3.metric(
+                                "גובה בסיס (z_base)", f"{d['z_base']:.0f} m"
+                            )
+                            m4.metric("גובה גג (z_top)", f"{d['z_top']:.0f} m")
+
+                            st.markdown(
+                                f"**תדר קטעון משוער ($f_{{cutoff}}$):** `{fc_str}`"
+                            )
+
+                        duct_table_data.append(
+                            {
+                                "#": idx,
+                                "סוג התעלה": d["type"],
+                                "בסיס (m)": f"{d['z_base']:.0f}",
+                                "גג (m)": f"{d['z_top']:.0f}",
+                                "עובי ΔZ (m)": f"{d['delta_z']:.0f}",
+                                "עוצמה ΔM": f"{d['delta_m']:.2f}",
+                                "תדר קטעון": fc_str,
+                            }
+                        )
+
+                    st.markdown("#### 📊 טבלת סיכום שכבות")
+                    st.dataframe(
+                        pd.DataFrame(duct_table_data), hide_index=True
+                    )
 
         with tab2:
             fig_n, ax_n = plt.subplots(figsize=(6, 8))
@@ -374,7 +607,7 @@ if "processed_df" in st.session_state:
             col1_n, col2_n = st.columns(2)
             with col1_n:
                 st.download_button(
-                    label="🖼️ הורד גרף פרופיל N (PNG)",
+                    label="🖼️ הורד גרף N (PNG)",
                     data=buf_n,
                     file_name=f"N_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.png",
                     mime="image/png",
@@ -382,7 +615,7 @@ if "processed_df" in st.session_state:
                 )
             with col2_n:
                 st.download_button(
-                    label="📄 הורד נתוני גרף N (CSV)",
+                    label="📄 הורד נתוני CSV",
                     data=csv_data,
                     file_name=f"N_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.csv",
                     mime="text/csv",
