@@ -1,3 +1,4 @@
+import calendar
 import io
 import math
 import re
@@ -190,7 +191,36 @@ if stations[station_choice] == "custom":
 else:
     station_id = stations[station_choice]
 
-selected_date = st.sidebar.date_input("תאריך:", datetime.today())
+# --- מנגנון בחירת תאריך מוגן מקלדת ומוגן ימים לא קיימים בחודש ---
+st.sidebar.markdown("**תאריך:**")
+today = datetime.today()
+
+col_y, col_m, col_d = st.sidebar.columns(3)
+
+with col_y:
+    selected_year = st.selectbox(
+        "שנה", list(range(today.year, today.year - 10, -1)), index=0
+    )
+
+with col_m:
+    selected_month = st.selectbox(
+        "חודש", list(range(1, 13)), index=today.month - 1
+    )
+
+# חישוב דינמי של מספר הימים בחודש ובשנה הנבחרים
+max_days_in_month = calendar.monthrange(selected_year, selected_month)[1]
+
+with col_d:
+    # אם היום הנוכחי חורג ממה שיש בחודש הנבחר, נציב את היום המקסימלי
+    default_day_idx = min(today.day, max_days_in_month) - 1
+    selected_day = st.selectbox(
+        "יום", list(range(1, max_days_in_month + 1)), index=default_day_idx
+    )
+
+selected_date = datetime(
+    selected_year, selected_month, selected_day
+).date()
+
 selected_hour = st.sidebar.selectbox(
     "שעה (UTC):", ["12", "00", "06", "18"], index=0
 )
