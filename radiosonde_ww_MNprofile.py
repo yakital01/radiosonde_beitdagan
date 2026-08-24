@@ -18,9 +18,10 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- מניעת קפיצת מקלדת וירטואלית בעת לחיצה על DateInput ב-Streamlit ---
+# --- מניעת קפיצת מקלדת וירטואלית + אפשור זום באצבעות (Pinch-to-zoom) ---
 st.markdown(
     """
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <style>
     /* מונע מלוח המקשים במובייל להיפתח כשלוחצים על ה-DateInput */
     div[data-baseweb="input"] input {
@@ -424,14 +425,14 @@ if "processed_df" in st.session_state:
             col_graph, col_info = st.columns([1.6, 1])
 
             with col_graph:
-                fig, ax = plt.subplots(figsize=(6, 8))
+                fig, ax = plt.subplots(figsize=(7, 9))
                 ax.plot(
                     df_plot["M"],
                     df_plot["HGHT"],
                     color="blue",
-                    linewidth=1.8,
+                    linewidth=2.2,
                     marker="o",
-                    markersize=3,
+                    markersize=4,
                     label="M Profile",
                 )
 
@@ -460,27 +461,32 @@ if "processed_df" in st.session_state:
                         d["z_base"],
                         color=c,
                         linestyle="--",
-                        linewidth=1.2,
+                        linewidth=1.4,
                         alpha=0.7,
                     )
                     ax.axhline(
                         min(d["z_top"], max_height),
                         color=c,
                         linestyle="--",
-                        linewidth=1.2,
+                        linewidth=1.4,
                         alpha=0.7,
                     )
 
-                ax.set_xlabel("M (Modified Refractivity)")
-                ax.set_ylabel("Height (m)")
+                # הגדלת פונטים של הצירים, הכותרות והערכים
+                ax.set_xlabel("M (Modified Refractivity)", fontsize=13, fontweight='bold')
+                ax.set_ylabel("Height (m)", fontsize=13, fontweight='bold')
                 ax.set_title(
                     f"Modified Refractivity (M) Profile\nStation: {station_id}"
-                    f" | Date: {datetime_str}"
+                    f" | Date: {datetime_str}",
+                    fontsize=14,
+                    fontweight='bold',
+                    pad=12
                 )
+                ax.tick_params(axis='both', which='major', labelsize=11)
                 ax.grid(True, which="both", linestyle="--", alpha=0.6)
 
-                # הצמדת הרישום לצד השמאלי העליון בתוך גוף הגרף
-                ax.legend(loc="upper left", fontsize="x-small", framealpha=0.85)
+                # מקרא מוגדל בצד שמאל למעלה
+                ax.legend(loc="upper left", fontsize=10.5, framealpha=0.9)
 
                 if not df_plot.empty:
                     m_min = math.floor(df_plot["M"].min() / 50) * 50
@@ -574,21 +580,25 @@ if "processed_df" in st.session_state:
                     )
 
         with tab2:
-            fig_n, ax_n = plt.subplots(figsize=(6, 8))
+            fig_n, ax_n = plt.subplots(figsize=(7, 9))
             ax_n.plot(
                 df_plot["N"],
                 df_plot["HGHT"],
                 color="green",
-                linewidth=1.8,
+                linewidth=2.2,
                 marker="o",
-                markersize=3,
+                markersize=4,
             )
-            ax_n.set_xlabel("N (Refractivity)")
-            ax_n.set_ylabel("Height (m)")
+            ax_n.set_xlabel("N (Refractivity)", fontsize=13, fontweight='bold')
+            ax_n.set_ylabel("Height (m)", fontsize=13, fontweight='bold')
             ax_n.set_title(
                 f"Refractivity (N) Profile\nStation: {station_id} | Date:"
-                f" {datetime_str}"
+                f" {datetime_str}",
+                fontsize=14,
+                fontweight='bold',
+                pad=12
             )
+            ax_n.tick_params(axis='both', which='major', labelsize=11)
             ax_n.grid(True, which="both", linestyle="--", alpha=0.6)
 
             if not df_plot.empty:
