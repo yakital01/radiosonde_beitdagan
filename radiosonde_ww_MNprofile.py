@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- מניעת קפיצת מקלדת בווירטואלית בעת לחיצה על DateInput ב-Streamlit ---
+# --- מניעת קפיצת מקלדת וירטואלית בעת לחיצה על DateInput ב-Streamlit ---
 st.markdown(
     """
     <style>
@@ -443,12 +443,18 @@ if "processed_df" in st.session_state:
 
                 for d in display_ducts:
                     c = colors_map.get(d["type"], "red")
+                    label_text = (
+                        f"{d['type']} ({d['z_base']:.0f}-{d['z_top']:.0f}m), "
+                        f"$\\Delta Z={d['delta_z']:.0f}m$, "
+                        f"$\\Delta M={d['delta_m']}$, "
+                        f"$\\theta_c={d['crit_angle_deg']:.2f}^\\circ$"
+                    )
                     ax.axhspan(
                         d["z_base"],
                         min(d["z_top"], max_height),
                         color=c,
                         alpha=0.2,
-                        label=f"{d['type']} ({d['z_base']:.0f}-{d['z_top']:.0f}m)",
+                        label=label_text,
                     )
                     ax.axhline(
                         d["z_base"],
@@ -472,7 +478,9 @@ if "processed_df" in st.session_state:
                     f" | Date: {datetime_str}"
                 )
                 ax.grid(True, which="both", linestyle="--", alpha=0.6)
-                ax.legend(loc="upper right", fontsize="small")
+
+                # הצמדת הרישום לצד השמאלי העליון בתוך גוף הגרף
+                ax.legend(loc="upper left", fontsize="x-small", framealpha=0.85)
 
                 if not df_plot.empty:
                     m_min = math.floor(df_plot["M"].min() / 50) * 50
