@@ -18,6 +18,23 @@ st.set_page_config(
     layout="wide",
 )
 
+# --- מניעת קפיצת מקלדת בווירטואלית בעת לחיצה על DateInput ב-Streamlit ---
+st.markdown(
+    """
+    <style>
+    /* מונע מלוח המקשים במובייל להיפתח כשלוחצים על ה-DateInput */
+    div[data-baseweb="input"] input {
+        caret-color: transparent !important;
+        pointer-events: none !important;
+    }
+    div[data-baseweb="calendar"] {
+        pointer-events: auto !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # --- פונקציות חישוב פיזיקליות ---
 def calculate_N(p, T_C, RH):
@@ -308,33 +325,10 @@ if stations[station_choice] == "custom":
 else:
     station_id = stations[station_choice]
 
-# --- מנגנון בחירת תאריך מוגן מקלדת ---
-st.sidebar.markdown("**תאריך:**")
-today = datetime.today()
-
-col_y, col_m, col_d = st.sidebar.columns(3)
-
-with col_y:
-    selected_year = st.selectbox(
-        "שנה", list(range(today.year, today.year - 10, -1)), index=0
-    )
-
-with col_m:
-    selected_month = st.selectbox(
-        "חודש", list(range(1, 13)), index=today.month - 1
-    )
-
-max_days_in_month = calendar.monthrange(selected_year, selected_month)[1]
-
-with col_d:
-    default_day_idx = min(today.day, max_days_in_month) - 1
-    selected_day = st.selectbox(
-        "יום", list(range(1, max_days_in_month + 1)), index=default_day_idx
-    )
-
-selected_date = datetime(
-    selected_year, selected_month, selected_day
-).date()
+# --- בחירת תאריך מבוססת לוח שנה מוגנת מקלדת ---
+selected_date = st.sidebar.date_input(
+    "בחר תאריך:", value=datetime.today(), format="DD/MM/YYYY"
+)
 
 selected_hour = st.sidebar.selectbox(
     "שעה (UTC):", ["12", "00", "06", "18"], index=0
