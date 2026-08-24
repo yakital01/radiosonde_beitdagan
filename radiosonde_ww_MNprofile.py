@@ -18,12 +18,10 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- מניעת קפיצת מקלדת וירטואלית + אפשור זום באצבעות (Pinch-to-zoom) ---
+# --- מניעת קפיצת מקלדת וירטואלית ב-DateInput ---
 st.markdown(
     """
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <style>
-    /* מונע מלוח המקשים במובייל להיפתח כשלוחצים על ה-DateInput */
     div[data-baseweb="input"] input {
         caret-color: transparent !important;
         pointer-events: none !important;
@@ -53,27 +51,19 @@ def calculate_M(N, z_m):
 
 
 def calculate_cutoff_frequency(delta_z, delta_m):
-    """
-    מחשב את תדר הקטעון (Cut-off Frequency) במגה-הרץ (MHz)
-    f_c = c / (0.157 * (delta_z^1.5) * sqrt(delta_m))
-    """
+    """מחשב את תדר הקטעון במגה-הרץ (MHz)"""
     if delta_z <= 0 or delta_m <= 0:
         return None
-
-    c = 3e8  # מהירות האור במטרים לשניה
+    c = 3e8
     try:
         f_hz = c / (0.157 * (delta_z**1.5) * math.sqrt(delta_m))
-        f_mhz = f_hz / 1e6
-        return f_mhz
+        return f_hz / 1e6
     except ZeroDivisionError:
         return None
 
 
 def calculate_critical_angle(delta_m):
-    """
-    מחשב את הזווית הקריטית במעלות (Critical Angle in Degrees)
-    theta_c = 0.081 * sqrt(delta_m)
-    """
+    """מחשב את הזווית הקריטית במעלות"""
     if delta_m <= 0:
         return 0.0
     return 0.081 * math.sqrt(delta_m)
@@ -229,7 +219,6 @@ def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
     in_duct = False
     start_idx = 0
 
-    # 1. זיהוי מקטעי שיפוע שלילי (dM/dz < 0) בנתונים המקוריים
     for i in range(len(df) - 1):
         dM = df.loc[i + 1, "M"] - df.loc[i, "M"]
 
@@ -246,7 +235,6 @@ def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
     if in_duct:
         raw_ducts.append((start_idx, len(df) - 1))
 
-    # 2. איחוד תעלות סמוכות מאוד (מרווח מופרד קטן מ-30 מטר)
     merged_ducts = []
     for duct in raw_ducts:
         if not merged_ducts:
@@ -260,7 +248,6 @@ def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
             else:
                 merged_ducts.append(duct)
 
-    # 3. סינון לפי ספי מינימום וסיווג פיזיקלי
     final_ducts = []
 
     for s_idx, e_idx in merged_ducts:
@@ -272,11 +259,9 @@ def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
         delta_z = z_top - z_base
         delta_m = m_base - m_top
 
-        # סינון לפי עובי ועוצמה מינימליים
         if delta_z < min_delta_z or delta_m < min_delta_m:
             continue
 
-        # סיווג סוג התעלה (באנגלית)
         if s_idx == 0 or abs(z_base - surface_z) < 1.0:
             duct_type = "Surface Duct"
         elif m_top <= surface_m:
@@ -284,7 +269,6 @@ def detect_ducts(df_input, min_delta_m=5.0, min_delta_z=50.0):
         else:
             duct_type = "Elevated Duct"
 
-        # חישוב תדר קטעון וזווית קריטית
         fc_mhz = calculate_cutoff_frequency(delta_z, delta_m)
         crit_angle_deg = calculate_critical_angle(delta_m)
 
@@ -326,7 +310,6 @@ if stations[station_choice] == "custom":
 else:
     station_id = stations[station_choice]
 
-# --- בחירת תאריך מבוססת לוח שנה מוגנת מקלדת ---
 selected_date = st.sidebar.date_input(
     "בחר תאריך:", value=datetime.today(), format="DD/MM/YYYY"
 )
@@ -353,6 +336,7 @@ min_delta_z = st.sidebar.slider(
 
 submit_btn = st.sidebar.button("🚀 שליפה והצגת פרופיל")
 
+# 1. שליפת הנתונים מתרחשת אך ורק בלחיצה על כפתור השליפה
 if submit_btn:
     with st.spinner("שולף נתונים מאתר UWYO..."):
         raw_df, uwyo_url = fetch_uwyo_data(
@@ -368,14 +352,18 @@ if submit_btn:
                 lambda r: calculate_M(r["N"], r["HGHT"]), axis=1
             )
 
-            st.session_state["processed_df"] = df_proc
+            st.session_state["raw_df"] = df_proc
             st.session_state["uwyo_url"] = uwyo_url
+            st.session_state["station_id"] = station_id
+            st.session_state["formatted_date_str"] = selected_date.strftime("%d%b%Y")
+            st.session_state["selected_hour"] = selected_hour
         else:
-            st.session_state["processed_df"] = None
+            st.session_state["raw_df"] = None
             st.session_state["uwyo_url"] = uwyo_url
 
-if "processed_df" in st.session_state:
-    df_proc = st.session_state["processed_df"]
+# 2. עיבוד והצגה של הנתונים הקיים - מופעל דינמית בכל שינוי בסליידרים
+if "raw_df" in st.session_state:
+    df_proc = st.session_state["raw_df"]
     uwyo_url = st.session_state["uwyo_url"]
 
     if df_proc is None or df_proc.empty:
@@ -400,10 +388,12 @@ if "processed_df" in st.session_state:
 
         df_plot = crop_and_interpolate(df_proc, max_height)
 
-        formatted_date_str = selected_date.strftime("%d%b%Y")
-        datetime_str = f"{formatted_date_str} {selected_hour}:00Z"
+        cur_station = st.session_state.get("station_id", station_id)
+        formatted_date_str = st.session_state.get("formatted_date_str", selected_date.strftime("%d%b%Y"))
+        cur_hour = st.session_state.get("selected_hour", selected_hour)
+        datetime_str = f"{formatted_date_str} {cur_hour}:00Z"
 
-        # הרצת אלגוריתם זיהוי התעלות
+        # זיהוי תעלות בזמן אמת לפי ערכי ה-min_delta_m וה-min_delta_z הנוכחיים מהסליידרים
         detected_ducts = detect_ducts(
             df_proc, min_delta_m=min_delta_m, min_delta_z=min_delta_z
         )
@@ -472,11 +462,10 @@ if "processed_df" in st.session_state:
                         alpha=0.7,
                     )
 
-                # הגדלת פונטים של הצירים, הכותרות והערכים
                 ax.set_xlabel("M (Modified Refractivity)", fontsize=13, fontweight='bold')
                 ax.set_ylabel("Height (m)", fontsize=13, fontweight='bold')
                 ax.set_title(
-                    f"Modified Refractivity (M) Profile\nStation: {station_id}"
+                    f"Modified Refractivity (M) Profile\nStation: {cur_station}"
                     f" | Date: {datetime_str}",
                     fontsize=14,
                     fontweight='bold',
@@ -485,7 +474,6 @@ if "processed_df" in st.session_state:
                 ax.tick_params(axis='both', which='major', labelsize=11)
                 ax.grid(True, which="both", linestyle="--", alpha=0.6)
 
-                # מקרא מוגדל בצד שמאל למעלה
                 ax.legend(loc="upper left", fontsize=10.5, framealpha=0.9)
 
                 if not df_plot.empty:
@@ -506,7 +494,7 @@ if "processed_df" in st.session_state:
                     st.download_button(
                         label="🖼️ הורד גרף M (PNG)",
                         data=buf_m,
-                        file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.png",
+                        file_name=f"M_profile_{cur_station}_{formatted_date_str}_{cur_hour}Z.png",
                         mime="image/png",
                         use_container_width=True,
                     )
@@ -514,7 +502,7 @@ if "processed_df" in st.session_state:
                     st.download_button(
                         label="📄 הורד נתוני CSV",
                         data=csv_data,
-                        file_name=f"M_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.csv",
+                        file_name=f"M_profile_{cur_station}_{formatted_date_str}_{cur_hour}Z.csv",
                         mime="text/csv",
                         use_container_width=True,
                     )
@@ -592,7 +580,7 @@ if "processed_df" in st.session_state:
             ax_n.set_xlabel("N (Refractivity)", fontsize=13, fontweight='bold')
             ax_n.set_ylabel("Height (m)", fontsize=13, fontweight='bold')
             ax_n.set_title(
-                f"Refractivity (N) Profile\nStation: {station_id} | Date:"
+                f"Refractivity (N) Profile\nStation: {cur_station} | Date:"
                 f" {datetime_str}",
                 fontsize=14,
                 fontweight='bold',
@@ -619,7 +607,7 @@ if "processed_df" in st.session_state:
                 st.download_button(
                     label="🖼️ הורד גרף N (PNG)",
                     data=buf_n,
-                    file_name=f"N_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.png",
+                    file_name=f"N_profile_{cur_station}_{formatted_date_str}_{cur_hour}Z.png",
                     mime="image/png",
                     use_container_width=True,
                 )
@@ -627,7 +615,7 @@ if "processed_df" in st.session_state:
                 st.download_button(
                     label="📄 הורד נתוני CSV",
                     data=csv_data,
-                    file_name=f"N_profile_{station_id}_{formatted_date_str}_{selected_hour}Z.csv",
+                    file_name=f"N_profile_{cur_station}_{formatted_date_str}_{cur_hour}Z.csv",
                     mime="text/csv",
                     use_container_width=True,
                 )
